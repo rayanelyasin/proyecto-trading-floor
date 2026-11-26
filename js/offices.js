@@ -35,6 +35,7 @@ export const LAB_ZONES = [
   zone('alertas', 'Alertas', 'Avisos de precio e indicadores', 'alertas', undefined, -8, 10.35, 1.9, { station: [-8, 12.2, PI] }),
   zone('seguimiento', 'Seguimiento', 'Activos favoritos y sus precios', 'seguimiento', undefined, -3.5, 10.35, 1.9, { station: [-3.5, 12.2, PI] }),
   zone('agentes', 'Piso de agentes', 'Lecturas de los agentes de Pulso', 'agentes', undefined, 1, 10.35, 1.9, { station: [1, 12.2, PI] }),
+  zone('puesto', 'Tu puesto de trading', 'Siéntate y abre el análisis de mercado', 'analisis', undefined, 11, 6.2, 1.2, { sit: { x: 11, z: 4.97, rot: PI } }),
   ...LAB_SEATS.map((s) => zone(`ag-${s.key}`, s.name, s.role, 'agente', s.key, s.stand[0], s.stand[1], 1.25, { agent: true })),
 ];
 export const LAB_SPAWN = { x: 2, z: 9.5 };
@@ -60,6 +61,7 @@ export const AI_ZONES = [
   zone('trabajos', 'Nuevo trabajo', 'Elige un flujo y mira quién lo hace', 'oficinaai', 'trabajos', -4.5, 11.75, 1.8, { station: [-4.5, 13.6, PI] }),
   zone('negocio', 'Mi negocio', 'Tus números y tu agenda', 'oficinaai', 'negocio', -0.5, 11.75, 1.8, { station: [-0.5, 13.6, PI] }),
   zone('entregas', 'Entregas', 'Lo que tus agentes dejaron listo', 'oficinaai', 'entregas', 3.5, 11.75, 1.8, { station: [3.5, 13.6, PI] }),
+  zone('puesto', 'Tu escritorio', 'Siéntate y elige un trabajo para tu equipo', 'oficinaai', 'trabajos', 0, -1.3, 1.2, { sit: { x: 0, z: -2.53, rot: PI } }),
   ...AI_SEATS.filter((s) => s.id !== 'director').map((s) => zone(`ag-${s.key}`, s.name, s.role, 'agente', s.key, s.stand[0], s.stand[1], 1.25, { agent: true })),
 ];
 export const AI_SPAWN = { x: 0, z: 8.5 };
@@ -116,7 +118,7 @@ export function buildLab(h) {
   ob(5, 9, -11.4, 8.2, 1.1);
   plaque('Laboratorio', -9, 3.6, -14.9, 0, 3.4);
   // trading: un puesto por agente, con su pantalla y su silla
-  LAB_SEATS.forEach((s) => workstation(5, s.desk[0], s.desk[1], 2, 2.6, 'chart'));
+  LAB_SEATS.forEach((s) => workstation(5, s.desk[0], s.desk[1], 3, 3.4, 'trade'));
   // centro de cómputo (servidores) con vidrio
   { const fl = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 9), new THREE.MeshStandardMaterial({ color: 0x1c1e21, roughness: 0.5, metalness: 0.4 })); fl.rotation.x = -PI / 2; fl.position.set(16.5, 0.014, -8.2); fl.receiveShadow = true; h.scene.add(fl); }
   [-11.4, -9.9, -8.4, -6.9, -5.4].forEach((z) => { rack(18.7, z, -PI / 2); rack(14.3, z, PI / 2); ob(5, 18.7, z, 0.95, 0.85); ob(5, 14.3, z, 0.95, 0.85); });
@@ -132,12 +134,13 @@ export function buildLab(h) {
   // descanso y plantas
   sofa(17, 8.5, 3.0, -PI / 2, M.fabric); ob(5, 17.4, 8.5, 1.2, 3.2);
   plant(-18.6, 12.6, 1.2); plant(18.6, 13.2, 1.2); plant(-18.6, -13, 1.1); plant(2, -5.5, 1); plant(-1, 0, 0.9);
+  workstation(5, 11, 4, 3, 3.4, 'trade');
   spot(5, [0, 2], [-3, 5.5], [8, 0.5], [12, 6], [-12, 0.2], [-1, -9], [5, -8.2], [15, 4], [-17, 6], [-6, 8]);
   void box; void cyl; void dark; void monitor;
   return { wall };
 }
 export function buildAIOffice(h) {
-  const { M, desk, officeChair, makeScreen, workstation, plant, sofa, plaque, tag, ob, spot, warm } = h;
+  const { M, box, desk, officeChair, makeScreen, workstation, plant, sofa, plaque, tag, ob, spot, warm } = h;
   warm(-8, 4.6, -4, 40); warm(10, 4.6, 6, 40);
   const meta = makeScreen(11, 4.6, 1536);
   meta.mesh.position.set(0, 3.55, -14.8); tag(meta.mesh, 'director'); drawMetaBoard(meta);
@@ -150,9 +153,42 @@ export function buildAIOffice(h) {
   }
   // el director en el centro del fondo y un puesto por cada agente
   workstation(6, 0, -11, 2, 2.6, 'code');
+  workstation(6, 0, -3.5, 2, 2.6, 'chart');
   for (const r of ROOMS) r.ids.forEach((id, i) => workstation(6, r.xs[i % r.xs.length], r.zs[Math.floor(i / r.xs.length)], 2, 2.4, i % 2 ? 'code' : 'chart'));
   void desk; void officeChair;
   sofa(-18, 0, 3.2, PI / 2, M.fabric); ob(6, -18.3, 0, 1.2, 3.4);
   plant(-18.6, -13, 1.2); plant(18.6, -13, 1.2); plant(18.6, 13.4, 1.2); plant(-18.6, 13.4, 1.2); plant(-3, 1, 1); plant(3, 1, 1);
+  // detalles de cada departamento: pizarras con el trabajo que se hace ahí y paquetes en Pedidos
+  const board = (x, y, z, ry, w, h, title, draw) => {
+    const s = makeScreen(w, h, 768);
+    s.mesh.position.set(x, y, z); s.mesh.rotation.y = ry;
+    const { ctx, canvas: c } = s;
+    ctx.fillStyle = '#f4f1ea'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = '#1b3a30'; ctx.font = `600 ${c.height * 0.13}px Georgia, serif`; ctx.fillText(title, 28, c.height * 0.2);
+    draw(ctx, c); s.texture.needsUpdate = true;
+  };
+  board(-12, 2.2, -14.78, 0, 4.2, 2.1, 'Ideas de la semana', (g, c) => {
+    ['#f2c14e', '#e86a92', '#7ec8a4', '#8fb4e8', '#f29b5c', '#b79be0'].forEach((col, i) => {
+      const x = 28 + (i % 3) * (c.width / 3 - 4), y = c.height * 0.3 + Math.floor(i / 3) * (c.height * 0.33);
+      g.save(); g.translate(x, y); g.rotate((i % 2 ? 1 : -1) * 0.03); g.fillStyle = col; g.fillRect(0, 0, c.width / 3 - 42, c.height * 0.27);
+      g.fillStyle = '#2a2a2a'; g.font = `500 ${c.height * 0.06}px Inter, sans-serif`; g.fillText(['Gancho', 'Guion', 'Caption', 'Reel', 'Carrusel', 'Calendario'][i], 14, c.height * 0.09); g.restore();
+    });
+  });
+  board(12, 2.2, -14.78, 0, 4.2, 2.1, 'Ventas del mes', (g, c) => {
+    const vals = [0.35, 0.5, 0.42, 0.66, 0.58, 0.8, 0.92];
+    vals.forEach((v, i) => { g.fillStyle = i === vals.length - 1 ? '#1e6a55' : '#8fc3ae'; g.fillRect(40 + i * (c.width - 80) / vals.length, c.height * 0.92 - v * c.height * 0.62, (c.width - 80) / vals.length - 14, v * c.height * 0.62); });
+  });
+  board(-19.88, 2.2, 6.5, PI / 2, 3.6, 1.8, 'Pedidos y envíos', (g, c) => {
+    ['Confirmado', 'En camino', 'Entregado'].forEach((t, i) => { g.fillStyle = ['#f2c14e', '#8fb4e8', '#7ec8a4'][i]; g.fillRect(28 + i * (c.width - 56) / 3, c.height * 0.32, (c.width - 56) / 3 - 14, c.height * 0.5); g.fillStyle = '#2a2a2a'; g.font = `500 ${c.height * 0.07}px Inter, sans-serif`; g.fillText(t, 40 + i * (c.width - 56) / 3, c.height * 0.42); });
+  });
+  // pizarra libre de Crecimiento
+  box(0.08, 1.6, 0.08, M.metal, 9.9, 0.8, 0.7, 0); box(0.08, 1.6, 0.08, M.metal, 13.1, 0.8, 0.7, 0);
+  board(11.5, 1.55, 0.74, 0, 3.4, 1.5, 'Crecimiento', (g, c) => {
+    g.strokeStyle = '#1e6a55'; g.lineWidth = 6; g.beginPath();
+    for (let i = 0; i <= 12; i++) { const x = 40 + i * (c.width - 80) / 12, y = c.height * 0.88 - (i / 12) * c.height * 0.5 - Math.sin(i * 1.3) * c.height * 0.05; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+  });
+  const cardboard = new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 0.9 });
+  [[-18.3, 4.4, 0.55], [-17.5, 4.6, 0.45], [-18.1, 5.3, 0.6], [-17.3, 5.5, 0.4]].forEach(([x, z, s]) => box(s * 1.2, s * 0.8, s, cardboard, x, s * 0.4, z, 0.02));
+  ob(6, -17.9, 5, 1.8, 1.6);
   spot(6, [0, 0], [-3, 6], [3, 6], [0, 4], [-2.4, -6], [2.4, -6], [-4, 12], [4.5, 9.4], [-8, 1.2], [16, 0.8], [0, 10.5]);
 }

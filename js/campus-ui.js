@@ -2,6 +2,7 @@
 import { createCampus, CONTROL_MODES, getControlMode, setControlMode } from './campus.js';
 import { BUILDINGS, PLACE_COLORS, MAX_PLACES, loadPlaces, savePlaces, newPlaceId } from './campus-data.js';
 import { store, save } from './store.js';
+import { QUALITY_LABELS, qualityChoice, setQualityChoice } from './quality.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -31,6 +32,7 @@ export async function mountCampus(el, { profile = {}, toast = () => {} } = {}) {
     </header>
     <nav class="cmp-quick" id="cmpQuick" aria-label="Acceso rápido a los edificios"></nav>
     <aside class="cmp-map" aria-label="Mapa del campus"><canvas id="cmpMap" width="180" height="180" aria-label="Mapa del campus. Toca un punto para caminar hasta allí."></canvas></aside>
+    <div class="cmp-zoom" role="group" aria-label="Acercar o alejar la cámara"><button type="button" data-z="0.18" aria-label="Alejar">−</button><button type="button" data-z="-0.18" aria-label="Acercar">+</button></div>
     <div class="cmp-prompt" id="cmpPrompt" hidden><div><b id="cmpPName"></b><small id="cmpPDetail"></small></div><button class="btn primary" id="cmpEnter" type="button">Entrar</button></div>
     <p class="cmp-help" id="cmpHelp" role="status"></p>
     <aside class="cmp-panel" id="cmpPanel" hidden aria-labelledby="cmpPanelTitle"><header><h2 id="cmpPanelTitle">Lugares del campus</h2><button class="btn ghost sm" id="cmpPanelX" type="button" aria-label="Cerrar">✕</button></header><div id="cmpPanelBody"></div></aside>`;
@@ -51,6 +53,7 @@ export async function mountCampus(el, { profile = {}, toast = () => {} } = {}) {
   places = await loadPlaces(); campus.setPlaces(places);
   paintQuick(); paintModes(); paintRole();
   $('#cmpEnter', root).addEventListener('click', () => campus.interact());
+  root.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => campus.zoomBy(+b.dataset.z)));
   $('#cmpModes', root).addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) setControlMode(b.dataset.mode); });
   addEventListener('pulso:control', paintModes);
   $('#cmpRole', root).addEventListener('click', (e) => { const b = e.target.closest('[data-role]'); if (!b) return; store.role = b.dataset.role; save(); document.body.dataset.role = store.role; paintRole(); if (!isOwner()) { editing = null; } if (!$('#cmpPanel', root).hidden) paintPanel(); });
@@ -99,10 +102,12 @@ function paintPanel(highlight) {
     <div class="seg cmp-role-inline" id="cmpRole2" role="group" aria-label="Rol"><button type="button" data-role="dueno" class="${owner ? 'on' : ''}">Dueño</button><button type="button" data-role="miembro" class="${owner ? '' : 'on'}">Miembro</button></div>
     ${owner ? `<button class="btn primary" id="cmpNew" type="button" ${places.length >= MAX_PLACES ? 'disabled' : ''}>＋ Añadir lugar</button>` : '<p class="muted cmp-note">Solo el dueño puede añadir o editar lugares. Tú puedes visitarlos.</p>'}
     ${status ? `<p class="cmp-status" role="status">${esc(status)}</p>` : ''}
+    <section class="cmp-quality"><h4>Calidad gráfica</h4><div class="cr-pills">${Object.entries(QUALITY_LABELS).map(([k, v]) => `<button type="button" data-quality="${k}" aria-pressed="${k === qualityChoice()}">${v}</button>`).join('')}</div></section>
     <ul class="cmp-list">${places.length ? places.map((p) => `
       <li class="${p.id === highlight ? 'hl' : ''}" style="--c:${p.color}"><div><b>${esc(p.name)}</b><small>${esc(p.description || 'Sin descripción')}</small>
         <small class="muted">${p.link.type === 'building' ? `Enlazado a ${esc(BUILDINGS.find((b) => b.id === p.link.value)?.name || 'un edificio')}` : p.link.type === 'url' ? 'Enlace a un proyecto web' : 'Sin proyecto enlazado todavía'}</small></div>
         <div class="cmp-act"><button class="btn sm" data-go="${esc(p.id)}" type="button">Ir</button>${owner ? `<button class="btn sm" data-edit="${esc(p.id)}" type="button">Editar</button>` : ''}</div></li>`).join('') : '<li class="muted">Aún no hay lugares. Los terrenos libres del campus esperan nuevos proyectos.</li>'}</ul>`;
+  body.querySelectorAll('[data-quality]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.quality !== qualityChoice()) { setQualityChoice(b.dataset.quality); location.reload(); } }));
   $('#cmpRole2', body)?.addEventListener('click', (e) => { const r = e.target.closest('[data-role]'); if (!r) return; store.role = r.dataset.role; save(); document.body.dataset.role = store.role; paintRole(); paintPanel(); });
   $('#cmpNew', body)?.addEventListener('click', () => { const pos = campus.playerPos(); editing = { isNew: true, id: newPlaceId(), name: '', description: '', color: PLACE_COLORS[0], x: +(pos.x + Math.sin(pos.yaw) * 5).toFixed(1), z: +(pos.z + Math.cos(pos.yaw) * 5).toFixed(1), link: { type: 'none', value: '' } }; status = ''; paintPanel(); });
   body.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { campus.goTo(b.dataset.go); if (innerWidth < 700) togglePanel(false); }));

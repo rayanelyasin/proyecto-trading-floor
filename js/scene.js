@@ -5,6 +5,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildAvatar, randomAvatar, animateAvatar } from './human.js';
 import { walkingPath } from './floor-path.js';
+import { quality } from './quality.js';
 import { LAB_FLOOR, AI_FLOOR, LAB_ZONES, AI_ZONES, LAB_SEATS, AI_SEATS, LAB_SPAWN, AI_SPAWN, buildLab, buildAIOffice, drawLabBoard } from './offices.js';
 
 const W = 40, D = 30;
@@ -50,8 +51,9 @@ export function createWorld(container, opts) {
   const { me: meInfo, members, agents, minimap } = opts;
 
   // ---------- render ----------
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  const Q = quality();   // calidad según el dispositivo (js/quality.js)
+  const renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.pixelRatio));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -83,17 +85,17 @@ export function createWorld(container, opts) {
   const sun = new THREE.DirectionalLight(0xffe2bf, 2.4);
   sun.position.set(-22, 24, 10);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
   Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 20, bottom: -20, near: 1, far: 80 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
-  sun.shadow.radius = 4;
+  sun.shadow.radius = Q.shadowRadius;
   scene.add(sun);
   const warm = (x, y, z, i = 60) => { const l = new THREE.PointLight(0xffd9a8, i, 0, 2); l.position.set(x, y, z); scene.add(l); return l; };
   warm(-10, 5, -8); warm(8, 5, -8); warm(2, 4.5, 3, 45); warm(-10, 4.5, 8, 45); warm(16, 4, 0, 35);
 
   // ---------- texturas ----------
-  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  const maxAniso = Math.min(renderer.capabilities.getMaxAnisotropy(), Q.anisotropy);
   const tex = (canvas, rx = 1, ry = 1) => {
     const t = new THREE.CanvasTexture(canvas);
     t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
@@ -104,30 +106,40 @@ export function createWorld(container, opts) {
   const walnut = tex(woodCanvas('#4a3122', 6, true), 1, 1);
   const slats = tex(slatCanvas('#3e2a1d'), 4, 1);
   const plaster = tex(noiseCanvas('#2e2b28', 10), 4, 2);
+  const weave = tex(noiseCanvas('#808080', 60), 10, 10);
+  const P = Q.physical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial;
 
   // ---------- materiales ----------
   const M = {
-    floor: new THREE.MeshStandardMaterial({ map: woodFloor, roughness: 0.42, metalness: 0, envMapIntensity: 0.6 }),
-    wall: new THREE.MeshStandardMaterial({ map: plaster, roughness: 0.95 }),
-    walnut: new THREE.MeshStandardMaterial({ map: walnut, roughness: 0.45, envMapIntensity: 0.8 }),
+    floor: new P({ map: woodFloor, roughness: 0.4, metalness: 0, envMapIntensity: 0.65, ...(Q.physical ? { clearcoat: 0.35, clearcoatRoughness: 0.32 } : {}), ...(Q.bump ? { bumpMap: woodFloor, bumpScale: 0.7 } : {}) }),
+    wall: new P({ map: plaster, roughness: 0.95, ...(Q.bump ? { bumpMap: plaster, bumpScale: 0.9 } : {}) }),
+    walnut: new P({ map: walnut, roughness: 0.42, envMapIntensity: 0.85, ...(Q.physical ? { clearcoat: 0.3, clearcoatRoughness: 0.3 } : {}), ...(Q.bump ? { bumpMap: walnut, bumpScale: 0.6 } : {}) }),
     slats: new THREE.MeshStandardMaterial({ map: slats, roughness: 0.6 }),
     brass: new THREE.MeshStandardMaterial({ color: 0xc9a96e, metalness: 1, roughness: 0.28 }),
-    metal: new THREE.MeshStandardMaterial({ color: 0x1b1b1d, metalness: 0.85, roughness: 0.35 }),
-    fabric: new THREE.MeshStandardMaterial({ color: 0x3b414c, roughness: 0.95 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x1d1d20, metalness: 0.92, roughness: 0.3, envMapIntensity: 1.25 }),
+    fabric: new P({ color: 0x3b414c, roughness: 1, ...(Q.physical ? { sheen: 0.9, sheenRoughness: 0.45, sheenColor: new THREE.Color(0x7d8696) } : {}), ...(Q.bump ? { bumpMap: weave, bumpScale: 1.4 } : {}) }),
     linen: new THREE.MeshStandardMaterial({ color: 0xcfc5b4, roughness: 0.95 }),
-    leather: new THREE.MeshStandardMaterial({ color: 0x6e4228, roughness: 0.5, envMapIntensity: 0.7 }),
+    leather: new P({ color: 0x6e4228, roughness: 0.48, envMapIntensity: 0.8, ...(Q.physical ? { clearcoat: 0.4, clearcoatRoughness: 0.4 } : {}) }),
     stone: new THREE.MeshStandardMaterial({ color: 0x8c877f, roughness: 0.8 }),
     carpet: new THREE.MeshStandardMaterial({ map: tex(noiseCanvas('#3b3633', 14), 8, 6), roughness: 1 }),
     leaf: new THREE.MeshStandardMaterial({ color: 0x35603e, roughness: 0.75, flatShading: true }),
     leaf2: new THREE.MeshStandardMaterial({ color: 0x4b7a4a, roughness: 0.75, flatShading: true }),
     shade: new THREE.MeshStandardMaterial({ color: 0xf3e6cf, emissive: 0xffd9a0, emissiveIntensity: 0.6, roughness: 0.9 }),
-    glass: new THREE.MeshStandardMaterial({ color: 0xbfd4e0, transparent: true, opacity: 0.12, roughness: 0.05, metalness: 0.1 }),
+    glass: Q.transmission ? new THREE.MeshPhysicalMaterial({ color: 0xe3f0f7, roughness: 0.04, metalness: 0, transmission: 0.92, thickness: 0.06, ior: 1.45, envMapIntensity: 1.6 }) : new THREE.MeshStandardMaterial({ color: 0xbfd4e0, transparent: true, opacity: 0.14, roughness: 0.05, metalness: 0.2, envMapIntensity: 1.6 }),
   };
 
   const add = (m, cast = true) => { m.castShadow = cast; m.receiveShadow = true; scene.add(m); return m; };
   const box = (w, h, d, mat, x, y, z, r = 0.03, parent = scene) => {
     const g = r ? new RoundedBoxGeometry(w, h, d, 2, Math.min(r, w / 2.01, h / 2.01, d / 2.01)) : new THREE.BoxGeometry(w, h, d);
     const m = new THREE.Mesh(g, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+  };
+  // sombra de contacto: una mancha suave en el suelo que asienta el mobiliario
+  const blobTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const k = c.getContext('2d'); const g = k.createRadialGradient(32, 32, 4, 32, 32, 32); g.addColorStop(0, '#fff'); g.addColorStop(1, '#000'); k.fillStyle = g; k.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+  const blobGeo = new THREE.PlaneGeometry(1, 1), blobMats = {};
+  const blob = (x, z, w, d, o = 0.3, rot = 0) => {
+    if (!Q.contactShadows) return;
+    const m = blobMats[o] ??= new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: blobTex, transparent: true, opacity: o, depthWrite: false });
+    const mesh = new THREE.Mesh(blobGeo, m); mesh.rotation.set(-Math.PI / 2, 0, rot); mesh.position.set(x, 0.011, z); mesh.scale.set(w, d, 1); scene.add(mesh);
   };
   const cyl = (rt, rb, h, mat, x, y, z, seg = 24, parent = scene) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
@@ -178,6 +190,7 @@ export function createWorld(container, opts) {
   // ---------- muebles ----------
   const chairGeo = { seat: new RoundedBoxGeometry(0.52, 0.09, 0.5, 2, 0.04), back: new RoundedBoxGeometry(0.52, 0.5, 0.07, 2, 0.03), leg: new THREE.CylinderGeometry(0.015, 0.015, 0.44, 8) };
   function chair(x, z, rot, mat = M.fabric) {
+    blob(x, z, 0.95, 0.95, 0.3);
     const g = new THREE.Group();
     const s = new THREE.Mesh(chairGeo.seat, mat); s.position.y = 0.46;
     const b = new THREE.Mesh(chairGeo.back, mat); b.position.set(0, 0.76, -0.22); b.rotation.x = -0.08;
@@ -186,6 +199,7 @@ export function createWorld(container, opts) {
     g.position.set(x, 0, z); g.rotation.y = rot; scene.add(g); return g;
   }
   function officeChair(x, z, rot) {
+    blob(x, z, 1.05, 1.05, 0.34);
     const g = new THREE.Group();
     cyl(0.3, 0.3, 0.04, M.metal, 0, 0.06, 0, 5, g);
     cyl(0.03, 0.03, 0.38, M.metal, 0, 0.27, 0, 8, g);
@@ -194,6 +208,7 @@ export function createWorld(container, opts) {
     g.position.set(x, 0, z); g.rotation.y = rot; scene.add(g); return g;
   }
   function desk(x, z, w, d, rot = 0) {
+    blob(x, z, w + 0.7, d + 0.8, 0.4, -rot);
     const g = new THREE.Group();
     box(w, 0.05, d, M.walnut, 0, 0.74, 0, 0.015, g);
     box(0.05, 0.72, d - 0.1, M.metal, -w / 2 + 0.1, 0.36, 0, 0, g);
@@ -208,6 +223,7 @@ export function createWorld(container, opts) {
     return s;
   }
   function sofa(x, z, w, rot, mat = M.linen) {
+    blob(x, z, rot % Math.PI ? 1.5 : w + 0.5, rot % Math.PI ? w + 0.5 : 1.5, 0.34);
     const g = new THREE.Group();
     box(w, 0.36, 0.9, mat, 0, 0.26, 0, 0.08, g);
     box(w, 0.5, 0.22, mat, 0, 0.62, -0.34, 0.08, g);
@@ -422,7 +438,13 @@ export function createWorld(container, opts) {
   }
   function workstation(f, x, z, n = 2, w = 2.6, kind = 'code') {
     desk(x, z, w, 0.9);
-    for (let i = 0; i < n; i++) { const s = monitor(x + (i - (n - 1) / 2) * 0.98, z, 0.9, 0.52, 384); kind === 'code' ? codeScreen(s) : paintMini(s, (i % 3) - 1); }
+    const trade = kind === 'trade';
+    for (let i = 0; i < n; i++) {
+      const off = i - (n - 1) / 2, sc = monitor(x + off * 0.98, z, 0.9, 0.52, 384);
+      if (trade && n > 1) { sc.mesh.rotation.y = -off * 0.3; sc.mesh.position.z += Math.abs(off) * 0.1; sc.mesh.position.x -= off * 0.07; }
+      kind === 'code' ? codeScreen(sc) : paintMini(sc, (i % 3) - 1);
+    }
+    if (trade) { const top = monitor(x, z, 0.9, 0.52, 384); top.mesh.position.y += 0.6; cyl(0.02, 0.02, 0.48, M.metal, x, 1.2, z - 0.13, 8); paintMini(top, 0); tableLamp(x + w / 2 - 0.2, 0.765, z - 0.2); box(0.22, 0.012, 0.3, M.linen, x + w / 2 - 0.62, 0.775, z + 0.22, 0.003); }
     box(0.42, 0.015, 0.14, M.metal, x, 0.775, z + 0.22, 0.004); box(0.06, 0.02, 0.1, M.metal, x + 0.4, 0.775, z + 0.22, 0.008);
     box(0.22, 0.46, 0.46, M.metal, x + w / 2 - 0.3, 0.26, z, 0.02); cyl(0.04, 0.035, 0.09, M.linen, x - w / 2 + 0.3, 0.82, z + 0.2, 12);
     officeChair(x, z + 0.95, Math.PI); ob(f, x, z + 0.4, w, 1.8);
@@ -736,8 +758,9 @@ export function createWorld(container, opts) {
   for (const s of [...LAB_SEATS, ...AI_SEATS]) {
     const a = makeAvatar({ id: s.key, name: s.name, kind: 'npc', avatar: randomAvatar(s.key) });
     a.member = { name: s.name, role: s.role, floor: s.floor };
-    a.floor = s.floor; a.static = true; a.seated = true; a.agentKey = s.key; a.lines = s.lines;
+    a.floor = s.floor; a.seated = true; a.agentKey = s.key; a.lines = s.lines; a.speed = 1.35;
     a.group.position.set(s.x, 0, s.z + 0.02); a.group.rotation.y = s.rot;
+    a.ai = { state: 'seated', until: performance.now() + 6000 + Math.random() * 40000, seat: { x: s.x, z: s.z, rot: s.rot }, stand: { x: s.stand[0], z: s.stand[1] }, path: null, dest: null };
     a.group.visible = false; a.label.visible = false;
     npcs.push(a); agentAvs.set(s.key, a);
   }
@@ -775,7 +798,7 @@ export function createWorld(container, opts) {
       clearNavigation();
       e.preventDefault();
     }
-    if (e.type === 'keydown' && (k === 'e' || k === 'enter') && currentZone) opts.onInteract?.(currentZone);
+    if (e.type === 'keydown' && (k === 'e' || k === 'enter') && currentZone) interact(currentZone);
     if (e.type === 'keydown' && k === 'v') setView(VIEWS[(VIEWS.indexOf(view) + 1) % 3]);
     if (e.type === 'keydown' && /^[1-4]$/.test(k)) setFloor(+k);
   };
@@ -800,10 +823,18 @@ export function createWorld(container, opts) {
     ray.setFromCamera(ndc, camera);
   };
   let dragLast = null;
-  renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; dragLast = { x: e.clientX, y: e.clientY }; });
+  const touches = new Map(); let pinchD = 0, pinching = false;
+  renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; dragLast = { x: e.clientX, y: e.clientY }; touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinching = touches.size >= 2; pinchD = 0; });
+  const endTouch = (e) => { touches.delete(e.pointerId); if (touches.size < 2) pinching = false; };
+  addEventListener('pointerup', endTouch); addEventListener('pointercancel', endTouch);
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size === 2) { const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinchD) zoom = THREE.MathUtils.clamp(zoom * (pinchD / d), 0.45, 1.6); pinchD = d; }
+  });
   addEventListener('pointerup', () => { dragLast = null; });
   renderer.domElement.addEventListener('pointermove', (e) => {
-    if (!dragLast || !(e.buttons & 1)) return;
+    if (!dragLast || !(e.buttons & 1) || pinching) return;
     const dx = e.clientX - dragLast.x, dy = e.clientY - dragLast.y; dragLast = { x: e.clientX, y: e.clientY };
     if (view === 'primera') { yaw -= dx * 0.005; pitch = THREE.MathUtils.clamp(pitch - dy * 0.004, -1.2, 1.2); }
     else { azim -= dx * 0.006; if (view === 'maqueta') tilt = THREE.MathUtils.clamp(tilt + dy * 0.004, 0.35, 1.45); }
@@ -842,7 +873,7 @@ export function createWorld(container, opts) {
     return true;
   }
   function goToZone(zone) {
-    if (currentZone?.id === zone.id) { opts.onInteract?.(zone); return true; }
+    if (currentZone?.id === zone.id) { interact(zone); return true; }
     const point = approachPoint(zone);
     if (!moveTo(point.x, point.z)) return false;
     pendingZone = zone;
@@ -871,7 +902,78 @@ export function createWorld(container, opts) {
     av.group.rotation.y += diff * Math.min(1, dt * 10);
     return moved;
   }
+  // Transición suave entre estar de pie y sentado: se desliza hasta la silla mientras la animación se mezcla.
+  const ease = (t) => t * t * (3 - 2 * t);
+  function glide(av, to, rot, dur, done) {
+    av.glide = { from: av.group.position.clone(), to, r0: av.group.rotation.y, r1: rot, t: 0, dur, done };
+  }
+  function stepGlide(av, dt) {
+    const g = av.glide, k = ease(Math.min(1, (g.t += dt / g.dur)));
+    av.group.position.lerpVectors(g.from, g.to, k);
+    av.group.rotation.y = g.r0 + Math.atan2(Math.sin(g.r1 - g.r0), Math.cos(g.r1 - g.r0)) * k;
+    if (g.t >= 1) { av.glide = null; g.done?.(); }
+  }
+  function interact(zone) {
+    if (!zone.sit) { opts.onInteract?.(zone); return; }
+    if (me.seated || me.glide) return;
+    clearNavigation();
+    me.seated = true; me.sitZone = zone;
+    glide(me, new THREE.Vector3(zone.sit.x, 0, zone.sit.z), zone.sit.rot, 0.85, () => opts.onInteract?.(zone));
+  }
+  function standUp() {
+    if (!me.seated || me.glide) return;
+    const z = me.sitZone; me.seated = false; me.sitZone = null;
+    glide(me, new THREE.Vector3(z.x, 0, z.z), me.group.rotation.y, 0.7, null);
+  }
+  // Agentes: trabajan sentados, se levantan, cruzan la oficina esquivando muebles, hacen otra actividad y vuelven a sentarse.
+  function agentPlaces(a) {
+    const zones = ZONES_BY[a.floor].filter((z) => !z.agent && !z.sit).map((z) => ({ x: z.x, z: z.z, text: `Reviso ${z.label.toLowerCase()}` }));
+    const mates = [...agentAvs.values()].filter((o) => o !== a && o.floor === a.floor).map((o) => ({ x: o.ai.stand.x, z: o.ai.stand.z, text: `Le paso un encargo a ${o.name}` }));
+    return [...zones, ...mates];
+  }
+  function updateAgent(a, dt, now) {
+    const ai = a.ai;
+    if (a.glide) { stepGlide(a, dt); animate(a, false, dt); return; }
+    if (ai.state === 'seated') {
+      animate(a, false, dt);
+      if (now > ai.until) { ai.state = 'rising'; a.seated = false; glide(a, new THREE.Vector3(ai.stand.x, 0, ai.stand.z), a.group.rotation.y, 0.7, () => { ai.state = 'plan'; }); }
+      return;
+    }
+    if (ai.state === 'plan') {
+      const places = agentPlaces(a), d = places[(Math.random() * places.length) | 0];
+      const path = d ? walkingPath(a.group.position, d, BX, BZ, (x, z) => blocked(x, z, 0.4, a.floor)) : [];
+      if (!path.length) { ai.state = 'return'; ai.path = null; return; }
+      ai.path = path.map((p) => new THREE.Vector3(p.x, 0, p.z)); ai.dest = d; ai.state = 'walk';
+    }
+    if (ai.state === 'walk' || ai.state === 'return') {
+      if (ai.state === 'return' && !ai.path) {
+        const path = walkingPath(a.group.position, ai.stand, BX, BZ, (x, z) => blocked(x, z, 0.4, a.floor));
+        ai.path = path.map((p) => new THREE.Vector3(p.x, 0, p.z)); ai.path.push(new THREE.Vector3(ai.stand.x, 0, ai.stand.z));
+      }
+      const target = ai.path[0];
+      let walking = false;
+      if (target) {
+        tmp.subVectors(target, a.group.position); tmp.y = 0;
+        if (tmp.length() < 0.25) ai.path.shift(); else { walking = step(a, tmp, dt); if (!walking) ai.path.shift(); }
+      }
+      animate(a, walking, dt);
+      if (!ai.path.length) {
+        if (ai.state === 'walk') { ai.state = 'activity'; ai.until = now + 5000 + Math.random() * 6000; if (ai.dest?.text) say(a, ai.dest.text, 4200); }
+        else { ai.state = 'sitting'; a.seated = true; glide(a, new THREE.Vector3(ai.seat.x, 0, ai.seat.z + 0.02), ai.seat.rot, 0.85, () => { ai.state = 'seated'; ai.until = performance.now() + 22000 + Math.random() * 38000; }); }
+      }
+      return;
+    }
+    if (ai.state === 'activity') { animate(a, false, dt); if (now > ai.until) { ai.state = 'return'; ai.path = null; } return; }
+    animate(a, false, dt);
+  }
+
   function updateMe(dt) {
+    if (me.glide) { stepGlide(me, dt); animate(me, false, dt); return; }
+    if (me.seated) {
+      if (keys.has('w') || keys.has('a') || keys.has('s') || keys.has('d') || keys.has('arrowup') || keys.has('arrowdown') || me.target) standUp();
+      animate(me, false, dt);
+      return;
+    }
     tmp.set(0, 0, 0);
     const fwd = (keys.has('w') || keys.has('arrowup') ? 1 : 0) - (keys.has('s') || keys.has('arrowdown') ? 1 : 0);
     const str = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
@@ -953,7 +1055,7 @@ export function createWorld(container, opts) {
     if (pendingZone && currentZone?.id === pendingZone.id) {
       const zone = pendingZone;
       clearNavigation();
-      opts.onInteract?.(zone);
+      interact(zone);
     }
   }
 
@@ -1138,7 +1240,7 @@ export function createWorld(container, opts) {
     if (paused) return;
     const now = performance.now();
     updateMe(dt);
-    for (const n of npcs) if (n.floor === fl) updateNpc(n, dt, now);
+    for (const n of npcs) if (n.floor === fl) (n.ai ? updateAgent(n, dt, now) : updateNpc(n, dt, now));
     npcChatter(now);
     updateZone(now, dt);
     if (view === 'primera') {
@@ -1209,6 +1311,8 @@ export function createWorld(container, opts) {
     me, npcs, say, FLOORS, VIEWS, setFloor, agentAvatar: (key) => agentAvs.get(key), agentSay(key, text, ms) { const a = agentAvs.get(key); if (a) say(a, text, ms); }, setLabBoard(data) { drawLabBoard(lab.wall, data); }, setView, floorNpcs, applause, get floor() { return fl; }, get view() { return view; },
     get currentZone() { return currentZone; },
     setPaused(value) { paused = value; keys.clear(); },
+    zoomBy(delta) { zoom = THREE.MathUtils.clamp(zoom + delta, 0.45, 1.6); },
+    get seated() { return me.seated; }, standUp,
     destinations: () => ZONES_BY[fl],
     cancelNavigation: clearNavigation,
     goToZone(id) {

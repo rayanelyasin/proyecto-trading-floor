@@ -1,6 +1,6 @@
 import { buildAvatar, normalizeLegacyAvatar, randomAvatar, preloadAvatars, OPTIONS, MODELS } from './human.js';
 import {
-  BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, FACE_GROUPS, HAIR, SHOES, TOPS,
+  BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, FACE_GROUPS, HAIR, SHOES, TOPS, BEARDS, ACCESSORIES,
   loadEditableAvatar, normalizeEditable, updateEditableAvatar,
 } from './editable-avatar.js';
 import { createAvatarStage } from './creator-stage.js';
@@ -11,7 +11,7 @@ import { escapeHtml as esc } from './scene.js';
 const SECTIONS = {
   editable: [
     ['looks', 'Estilo', 'cube'], ['body', 'Cuerpo', 'person'], ['face', 'Rostro', 'eye'],
-    ['hair', 'Peinado', 'person'], ['clothes', 'Ropa', 'videoteca'],
+    ['hair', 'Peinado', 'person'], ['extras', 'Barba y extras', 'cube'], ['clothes', 'Ropa', 'videoteca'],
   ],
   legacy: [['looks', 'Galería', 'miembros'], ['body', 'Cuerpo', 'person'], ['extras', 'Extras', 'cube']],
 };
@@ -98,6 +98,13 @@ function panelContent(mode, section, category, config) {
       <div class="cr-cards cr-items">${HAIR.map(([value, label]) => card({
         key: 'hair', value, label, image: `assets/creator/hair-${value}.webp`, selected: config.hair === value,
       })).join('')}</div>`;
+  }
+  if (section === 'extras') {
+    const pills = (key, list, value) => `<div class="cr-pills" role="group">${list.map(([v, l]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${v === value}">${l}</button>`).join('')}</div>`;
+    return `<h3>Barba</h3>${pills('beard', BEARDS, config.beard)}
+      ${config.beard !== 'none' ? colors('beardColor', 'Color de la barba', PALETTES.beardColor, config.beardColor) : ''}
+      <h3>Accesorios</h3>${pills('accessory', ACCESSORIES, config.accessory)}
+      ${config.accessory !== 'none' && config.accessory !== 'earrings' ? colors('accessoryColor', 'Color del accesorio', PALETTES.accessoryColor, config.accessoryColor) : ''}`;
   }
   if (section === 'clothes') {
     const slots = [['top', 'Arriba'], ['bottom', 'Abajo'], ['shoes', 'Calzado']];
@@ -334,7 +341,7 @@ export function openCreator({ initial, name = '', first = false } = {}) {
     function openSection(id) {
       finishInput();
       section = id;
-      setFrame(id === 'face' || id === 'hair' ? 'face' : 'full');
+      setFrame(id === 'face' || id === 'hair' || id === 'extras' ? 'face' : 'full');
       paintPanel({ top: true, focus: `[data-section="${id}"]` });
     }
 

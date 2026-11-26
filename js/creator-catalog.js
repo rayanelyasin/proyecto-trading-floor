@@ -42,6 +42,14 @@ export const PALETTES = {
     ['#2b2220', 'Negro'], ['#513925', 'Castaño'], ['#775436', 'Café claro'],
     ['#a56a43', 'Cobrizo'], ['#d6bb87', 'Rubio'], ['#a8a2a1', 'Plata'], ['#724a63', 'Ciruela'],
   ],
+  beardColor: [
+    ['#2b2220', 'Negro'], ['#513925', 'Castaño'], ['#775436', 'Café claro'],
+    ['#a56a43', 'Cobrizo'], ['#d6bb87', 'Rubio'], ['#a8a2a1', 'Canoso'],
+  ],
+  accessoryColor: [
+    ['#2b2b2f', 'Negro'], ['#6b4a2f', 'Marrón'], ['#c9a461', 'Dorado'], ['#b9bcc2', 'Plata'],
+    ['#2d4a7a', 'Azul marino'], ['#a8403c', 'Rojo'], ['#3a6b52', 'Verde'],
+  ],
   fabric: [
     ['#e0d5bb', 'Marfil'], ['#bbaa8e', 'Arena'], ['#a26456', 'Ladrillo'],
     ['#71897d', 'Salvia'], ['#7e9eb6', 'Azul'], ['#796781', 'Ciruela'], ['#454448', 'Grafito'],

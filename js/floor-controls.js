@@ -1,6 +1,7 @@
 // Selector de controles de la oficina original: comparte el modo con el campus (teclado, mouse o táctil).
 // El joystick táctil envía las mismas teclas W A S D que ya entiende scene.js, sin tocar su lógica.
 import { CONTROL_MODES, getControlMode, setControlMode } from './campus.js';
+import { QUALITY_LABELS, qualityChoice, setQualityChoice } from './quality.js';
 
 let ready = false;
 export function initFloorControls(host) {
@@ -12,6 +13,13 @@ export function initFloorControls(host) {
     switchEl.innerHTML = Object.entries(CONTROL_MODES).map(([k, v]) => `<button type="button" data-mode="${k}" aria-pressed="false" aria-label="${v.label}"><span aria-hidden="true">${v.icon}</span><span>${v.label}</span></button>`).join('');
     switchEl.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) setControlMode(b.dataset.mode); });
   }
+  const qualityEl = host.querySelector('#qualitySwitch');
+  if (qualityEl) {
+    const current = qualityChoice();
+    qualityEl.innerHTML = '<small>Calidad gráfica</small>' + Object.entries(QUALITY_LABELS).map(([k, v]) => `<button type="button" data-quality="${k}" aria-pressed="${k === current}">${v}</button>`).join('');
+    qualityEl.addEventListener('click', (e) => { const b = e.target.closest('[data-quality]'); if (b && b.dataset.quality !== qualityChoice()) { setQualityChoice(b.dataset.quality); location.reload(); } });
+  }
+  host.querySelectorAll('[data-zoom]').forEach((b) => b.addEventListener('click', () => window.pulsoWorld?.zoomBy(+b.dataset.zoom)));
   if (innerWidth < 760) host.querySelectorAll('#cameraTools, #controlTools').forEach((d) => d.removeAttribute('open')); // más espacio en el teléfono
   const joy = document.createElement('div');
   joy.className = 'floor-joy'; joy.hidden = true; joy.innerHTML = '<i></i>'; joy.setAttribute('aria-hidden', 'true');

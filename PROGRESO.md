@@ -11,6 +11,14 @@ Los tres edificios son interiores del mismo motor 3D de Pulso (`js/scene.js`): m
 - **Laboratorio Pulso (piso 5, `js/offices.js`, `js/lab.js`, `js/miner.js`):** escritorios con seis agentes sentados (Directora, Riesgos, Macro, Análisis, Minero, Quant) más dos paseantes. Pantalla grande con precios reales e incubadora. Quioscos de Minería, Incubadora, Ranking y Riesgos, sala de comité, servidores (conexiones), y los quioscos de Alertas, Seguimiento y Agentes de Pulso, más el muro de mercado (Análisis). Acercarse a un agente abre su estado y su herramienta; los agentes hablan con datos reales.
 - **Mi oficina IA (piso 6, `js/oficina-ai-data.js`):** los 26 agentes del artefacto, cada uno en su escritorio y departamento (Creación, Negocio, Pedidos, Crecimiento) y el director al fondo. Quioscos de Nuevo trabajo (17 flujos que los agentes simulan con burbujas), Mi negocio y Entregas. Cada agente abre su ficha (puesto, qué hace, qué entrega y en qué trabajos participa). La aplicación original con todas sus funciones sigue en `#/ai-full`.
 
+## Realismo, movimiento y editor de avatar
+- **Calidad por dispositivo** (): Auto, Alta, Media o Baja, elegible en Controles (edificios) y en Lugares (campus). Ajusta resolución, tamaño de sombras, antialiasing, materiales físicos y relieves. Cambiarla recarga la página.
+- **Materiales** (): suelo y escritorios de madera barnizada con relieve, metal cepillado, tela con brillo suave, cuero, vidrio con reflejos (transmisión real en calidad alta) y sombras de contacto bajo el mobiliario.
+- **Estaciones de trading** con tres monitores en arco, un monitor superior, lámpara, teclado y notas; el puesto del jugador se usa sentado. Pizarras y paquetes por departamento en Mi oficina IA.
+- **Movimiento:** al interactuar con «Tu puesto» o «Tu escritorio» te deslizas a la silla y te sientas con transición; te levantas al moverte. Los agentes se levantan, cruzan la oficina esquivando muebles, visitan estaciones o a otros agentes y vuelven a sentarse.
+- **Cámara:** girar (arrastrar), acercar y alejar (rueda, pellizco y botones) y seguir al personaje.
+- **Editor de avatar:** se abre con tu personaje actual; permite peinado, color de pelo, barba (6 estilos moldeados sobre la piel), tono de piel, rasgos, complexión, ropa, zapatos y accesorios (gafas, gafas de sol, gorra, gorro, audífonos, aretes). Vista 3D en vivo, giro, deshacer y rehacer; al guardar se usa en el campus y en los tres edificios.
+
 ## Probado en el navegador (escritorio y 375 px)
 - Campus: puertas, aviso «Entrar», acceso rápido, entrada y salida de los tres edificios, minimapa, lugares del dueño guardados en el navegador y en el servidor.
 - Edificios: pisos 1 a 4, las 10 zonas del laboratorio y las de Mi oficina IA abren sus paneles, el trabajo simulado hace hablar a los agentes, la minería corre desde el panel.

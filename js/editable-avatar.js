@@ -40,7 +40,11 @@ export const EDITABLE_DEFAULT = {
   nose: 0, eyes: 0, jaw: 0, lips: 0, skin: '#ffffff', eyeColor: '#80583c',
   hair: 'short02', hairTint: '#513925', top: 'tshirt', bottom: 'jeans', shoes: 'shoes',
   topColor: '#7e9eb6', bottomColor: '#52627a', shoeColor: '#454448',
+  beard: 'none', beardColor: '#513925', accessory: 'none', accessoryColor: '#2b2b2f',
 };
+
+export const BEARDS = [['none', 'Sin barba'], ['stubble', 'Sombra'], ['short', 'Corta'], ['full', 'Completa'], ['goatee', 'Perilla'], ['mustache', 'Bigote']];
+export const ACCESSORIES = [['none', 'Ninguno'], ['glasses', 'Gafas'], ['sunglasses', 'Gafas de sol'], ['cap', 'Gorra'], ['beanie', 'Gorro'], ['headphones', 'Audífonos'], ['earrings', 'Aretes']];
 
 export const HAIR = [
   ['none', 'Rapado'], ['short02', 'Corto'], ['short04', 'Corto liso'],
@@ -81,7 +85,7 @@ export const FACE_GROUPS = [
 ];
 export const FACE_CONTROLS = FACE_GROUPS.flatMap(([, , controls]) => controls);
 
-const tintKeys = ['skin', 'eyeColor', 'hairTint', 'topColor', 'bottomColor', 'shoeColor'];
+const tintKeys = ['skin', 'eyeColor', 'hairTint', 'topColor', 'bottomColor', 'shoeColor', 'beardColor', 'accessoryColor'];
 
 export function normalizeEditable(config) {
   const c = { ...EDITABLE_DEFAULT, ...config, kind: 'editable' };
@@ -92,6 +96,8 @@ export function normalizeEditable(config) {
     if (!/^#[a-f0-9]{6}$/i.test(c[key])) c[key] = EDITABLE_DEFAULT[key];
   }
   if (!HAIR.some(([id]) => id === c.hair)) c.hair = EDITABLE_DEFAULT.hair;
+  if (!BEARDS.some(([id]) => id === c.beard)) c.beard = 'none';
+  if (!ACCESSORIES.some(([id]) => id === c.accessory)) c.accessory = 'none';
   for (const [slot, options] of Object.entries(clothingOptions)) {
     if (!options.some(([id]) => id === c[slot])) c[slot] = EDITABLE_DEFAULT[slot];
   }
@@ -112,6 +118,107 @@ const pairs = {
   noseHeight: ['face_nose_height_decr', 'face_nose_height_incr'],
   mouthWidth: ['face_mouth_width_decr', 'face_mouth_width_incr'],
 };
+
+
+// ---------- barba y accesorios (se miden en el hueso de la cabeza: x derecha, y arriba, z hacia el frente) ----------
+// La barba se moldea sobre la piel real: se lanzan rayos desde el eje de la cabeza y se levanta una malla
+// ligeramente por fuera de la superficie. Así se ajusta a cualquier rostro y a los controles de la cara.
+const _ray = new THREE.Raycaster();
+function beardGeometry(style, head, body) {
+  const full = style === 'full';
+  const d = { stubble: 0.0015, short: 0.005, full: 0.011, goatee: 0.009 }[style];
+  const ys = full ? [0.016, -0.004, -0.026, -0.048, -0.07, -0.088, -0.104] : [0.016, -0.004, -0.026, -0.048, -0.07, -0.088, -0.101];
+  const steps = 26, span = 1.5, pos = [];
+  head.updateWorldMatrix(true, false);
+  const dirL = new THREE.Vector3(), orgL = new THREE.Vector3(), orgW = new THREE.Vector3(), dirW = new THREE.Vector3(), hit = new THREE.Vector3();
+  const grid = ys.map((y, r) => {
+    const row = [];
+    for (let k = 0; k <= steps; k++) {
+      const a = -span + (2 * span * k) / steps;
+      dirL.set(Math.sin(a), 0, Math.cos(a));
+      orgL.set(0, y, 0).addScaledVector(dirL, 0.45);
+      orgW.copy(orgL).applyMatrix4(head.matrixWorld);
+      dirW.copy(dirL).negate().transformDirection(head.matrixWorld);
+      _ray.set(orgW, dirW);
+      const h = _ray.intersectObject(body, false)[0];
+      let p;
+      if (h) { p = head.worldToLocal(hit.copy(h.point)).clone(); p.addScaledVector(dirL, d); } else if (r > 0) { p = row[k - 0] ?? null; }
+      row.push(p ?? null);
+    }
+    return row;
+  });
+  // huecos: se rellenan con el anillo anterior para que la malla no se rompa
+  for (let r = 0; r < grid.length; r++) for (let k = 0; k <= steps; k++) if (!grid[r][k]) grid[r][k] = r ? grid[r - 1][k].clone().add(new THREE.Vector3(0, -0.012, -0.004)) : new THREE.Vector3(0, ys[0], 0.1);
+  if (full) { const last = grid[grid.length - 1].map((p) => p.clone().add(new THREE.Vector3(0, -0.026, -0.006)).multiply(new THREE.Vector3(0.7, 1, 0.9))); grid.push(last); }
+  for (const row of grid) for (const p of row) pos.push(p.x, p.y, p.z);
+  const index = [], rowLen = steps + 1;
+  for (let r = 0; r < grid.length - 1; r++) for (let k = 0; k < steps; k++) {
+    const a = -span + (2 * span * (k + 0.5)) / steps, y = ys[Math.min(r, ys.length - 1)];
+    const mouth = Math.abs(a) < (full ? 0.34 : 0.4) && y < 0.0 && y > -0.052;
+    const sideburn = y > -0.012 && Math.abs(a) < 1.08;
+    const chinOnly = style === 'goatee' && !(Math.abs(a) < 0.5 && y < -0.052);
+    const thin = (style === 'short' || full) && sideburn;
+    if (style !== 'stubble' && (mouth || thin || chinOnly)) continue;
+    const i = r * rowLen + k;
+    index.push(i, i + rowLen, i + 1, i + 1, i + rowLen, i + rowLen + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(index); g.computeVertexNormals();
+  return g;
+}
+function headExtras(c, head, body) {
+  const group = new THREE.Group(); group.name = 'pulsoHeadExtras';
+  const hair = new THREE.MeshStandardMaterial({ color: c.beardColor, roughness: 0.95, side: THREE.DoubleSide });
+  const gear = (extra = {}) => new THREE.MeshStandardMaterial({ color: c.accessoryColor, roughness: 0.55, metalness: 0.15, ...extra });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz); m.castShadow = true; group.add(m); return m; };
+  if (c.beard === 'stubble') { hair.transparent = true; hair.opacity = 0.42; hair.depthWrite = false; }
+  if (['stubble', 'short', 'full', 'goatee'].includes(c.beard)) { const m = new THREE.Mesh(beardGeometry(c.beard, head, body), hair); m.castShadow = false; group.add(m); }
+  if (c.beard === 'mustache') { const g = new THREE.CapsuleGeometry(0.006, 0.034, 4, 8); [-1, 1].forEach((s) => add(g, hair, s * 0.016, -0.03, 0.1255, 0, 0, Math.PI / 2 + s * 0.2)); }
+  const acc = c.accessory;
+  if (acc === 'glasses' || acc === 'sunglasses') {
+    const frame = gear({ roughness: 0.35, metalness: 0.5 }), ring = new THREE.TorusGeometry(0.03, 0.0035, 8, 28);
+    const lens = acc === 'sunglasses' ? new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.15, metalness: 0.3 }) : new THREE.MeshStandardMaterial({ color: 0xcfe6f4, roughness: 0.05, transparent: true, opacity: 0.18 });
+    [-1, 1].forEach((s) => {
+      add(ring, frame, s * 0.042, 0.052, 0.128);
+      add(new THREE.CircleGeometry(0.0295, 24), lens, s * 0.042, 0.052, 0.1285);
+      add(new THREE.BoxGeometry(0.0035, 0.0035, 0.118), frame, s * 0.0885, 0.054, 0.066, 0, s * 0.03);
+    });
+    add(new THREE.BoxGeometry(0.02, 0.0035, 0.0035), frame, 0, 0.058, 0.13);
+  }
+  if (acc === 'cap') {
+    const m = gear({ roughness: 0.85, metalness: 0 });
+    add(new THREE.SphereGeometry(0.113, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.52), m, 0, 0.07, -0.006, 0, 0, 0, 1, 0.95, 1.08);
+    add(new THREE.BoxGeometry(0.15, 0.004, 0.08), m, 0, 0.088, 0.148, -0.14);
+  }
+  if (acc === 'beanie') {
+    const m = gear({ roughness: 1, metalness: 0 });
+    add(new THREE.SphereGeometry(0.119, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.56), m, 0, 0.06, -0.006, 0, 0, 0, 1, 0.98, 1.06);
+    add(new THREE.TorusGeometry(0.114, 0.011, 8, 32), m, 0, 0.056, -0.004, Math.PI / 2, 0, 0, 1, 1.06, 1);
+  }
+  if (acc === 'headphones') {
+    const m = gear({ roughness: 0.4, metalness: 0.35 });
+    add(new THREE.TorusGeometry(0.118, 0.006, 8, 28, Math.PI), m, 0, 0.03, -0.004);
+    [-1, 1].forEach((s) => add(new THREE.CylinderGeometry(0.036, 0.036, 0.022, 20), m, s * 0.112, 0.022, -0.004, 0, 0, Math.PI / 2));
+  }
+  if (acc === 'earrings') {
+    const m = gear({ roughness: 0.2, metalness: 0.9 });
+    [-1, 1].forEach((s) => add(new THREE.SphereGeometry(0.0085, 12, 10), m, s * 0.093, -0.046, 0.002));
+  }
+  return group;
+}
+function refreshHeadExtras(avatar, c) {
+  const faceKey = ['jaw', 'chin', 'cheeks', 'mouthWidth', 'lips', 'weight', 'shape', 'age', 'height', 'muscle', 'proportions'].map((k) => (c[k] ?? 0).toFixed(2)).join(',');
+  const key = [c.beard, c.beardColor, c.accessory, c.accessoryColor, c.beard === 'none' ? '' : faceKey].join('|');
+  if (avatar.extrasKey === key) return;
+  avatar.extrasKey = key;
+  const head = avatar.root.getObjectByName('head'), body = avatar.root.getObjectByName('Body');
+  if (!head || !body) return;
+  if (avatar.extras) { avatar.extras.removeFromParent(); avatar.extras.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); avatar.extras = null; }
+  if (c.beard === 'none' && c.accessory === 'none') return;
+  avatar.root.updateMatrixWorld(true); body.skeleton.update();
+  avatar.extras = headExtras(c, head, body); head.add(avatar.extras);
+}
 
 export function updateEditableAvatar(avatar, config) {
   const c = normalizeEditable(config);
@@ -146,6 +253,7 @@ export function updateEditableAvatar(avatar, config) {
     const slotColor = mesh.userData.pulsoColor;
     if (slotColor) material.color.set(c[slotColor]);
   }
+  refreshHeadExtras(avatar, c);
 }
 
 const garment = (id) => `clothing_${id}.glb`;

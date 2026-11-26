@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildAvatar, animateAvatar, randomAvatar } from './human.js';
+import { quality } from './quality.js';
 import { BUILDINGS, LAND_SLOTS } from './campus-data.js';
 
 // ---------- modos de control (se comparten con el resto de la app) ----------
@@ -94,9 +95,9 @@ function car(color) {
 
 // ---------- API del campus ----------
 export function createCampus(container, { me = {}, onEnter, onNear } = {}) {
-  const coarse = matchMedia('(pointer: coarse)').matches;
-  const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
+  const Q = quality();   // misma calidad que los edificios (js/quality.js)
+  const renderer = new THREE.WebGLRenderer({ antialias: Q.antialias, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.pixelRatio));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95; renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none';
@@ -110,7 +111,7 @@ export function createCampus(container, { me = {}, onEnter, onNear } = {}) {
   scene.environmentIntensity = 0.3;
   scene.add(new THREE.HemisphereLight(0xdcecff, 0x6b8e5a, 0.8));
   const sun = new THREE.DirectionalLight(0xfff0d2, 2.2);
-  sun.position.set(45, 70, 35); sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
+  sun.position.set(45, 70, 35); sun.castShadow = true; sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap);
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 220 }); sun.shadow.bias = -0.0004;
   scene.add(sun);
 
@@ -481,6 +482,7 @@ export function createCampus(container, { me = {}, onEnter, onNear } = {}) {
   raf = requestAnimationFrame(frame);
 
   return {
+    zoomBy(delta) { st.dist = Math.max(7, Math.min(34, st.dist * (1 + delta))); },
     setPlaces, setMode, bindMinimap, interact, targets: () => targets, entries, getMode: () => st.mode,
     setPaused(v) { st.paused = v; last = performance.now(); },
     goTo(id) { const t = targets.find((x) => x.id === id); if (t) walkTo(t.x, t.z, null); },

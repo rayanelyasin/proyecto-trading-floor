@@ -111,3 +111,20 @@
 /* las etiquetas de los avatares no deben tapar los paneles */
 #world { z-index: 0; }
 #app .drawer { z-index: 14; }
+
+.cam-zoom { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; }
+.cam-zoom span { flex: 1; text-align: center; font-size: 12px; color: var(--muted); }
+.cam-zoom button, #qualitySwitch button { min-height: 40px; min-width: 40px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; font: inherit; cursor: pointer; }
+#qualitySwitch { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 4px 0; }
+#qualitySwitch small { width: 100%; font-size: 11px; color: var(--muted); }
+#qualitySwitch button { flex: 1; font-size: 12.5px; }
+#qualitySwitch button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.cmp-zoom { position: absolute; z-index: 4; right: max(10px, env(safe-area-inset-right)); top: calc(max(10px, env(safe-area-inset-top)) + 236px); display: flex; gap: 6px; }
+.cmp-zoom button { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: rgba(26, 25, 23, .9); color: var(--text); font-size: 20px; cursor: pointer; }
+.cmp-quality { display: grid; gap: 6px; }
+.cmp-quality h4 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 500; }
+.cmp-quality .cr-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.cmp-quality .cr-pills button { flex: 1; min-height: 40px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.cmp-quality .cr-pills button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+@media (max-width: 760px) { .cmp-zoom { top: calc(max(10px, env(safe-area-inset-top)) + 180px); } .cmp-zoom button { width: 40px; height: 40px; } }

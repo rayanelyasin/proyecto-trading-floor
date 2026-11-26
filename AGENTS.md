@@ -24,6 +24,7 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 - `js/campus.js`, `js/campus-ui.js`, `js/campus-data.js`: campus 3D (#/campus), controles (teclado, mouse, táctil), lugares del dueño y su guardado (`/__campus`).
 - `js/offices.js`, `js/lab.js`, `js/miner.js`: pisos 5 (Laboratorio) y 6 (Mi oficina IA) dentro del motor de scene.js, sus agentes y el motor de minería (solo simulación).
 - `edificio-ai/`: aplicación original de Mi oficina IA (#/ai-full) con sus modelos; `js/oficina-ai-data.js` tiene sus 26 agentes y 17 flujos. `js/floor-controls.js`: selector de controles de los edificios.
+- `js/quality.js`: calidad gráfica por dispositivo (auto, alta, media, baja).
 - `PROGRESO.md`: estado del campus y bloqueos pendientes.
 
 ## Convenciones
