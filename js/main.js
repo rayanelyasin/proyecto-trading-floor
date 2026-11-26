@@ -1,3 +1,4 @@
+import { loadEditableAvatar } from './editable-avatar.js';
 import { store, save } from './store.js';
 import { MEMBERS, COURSES, AGENTS, NPC_LINES } from './data.js';
 import { market, startTicker, SYMBOLS, fmt } from './market.js';
@@ -61,7 +62,18 @@ async function enterApp() {
     saveAvatar(r.avatar, r.name);
     acc = currentAccount();
   }
-  store.profile = { name: acc.name, color: acc.avatar.topColor, avatar: acc.avatar };
+  let avatar = acc.avatar;
+  if (avatar.kind === 'editable') {
+    $('#loader').hidden = false;
+    try { await loadEditableAvatar(avatar); } catch (error) {
+      console.error(error);
+      const { randomAvatar } = await import('./human.js');
+      avatar = randomAvatar(acc.username);
+      const { toast } = await import('./ui.js');
+      toast('No se pudo cargar tu avatar', 'Puedes reintentar al editar tu personaje.');
+    } finally { $('#loader').hidden = true; }
+  }
+  store.profile = { name: acc.name, color: avatar.topColor, avatar };
   save();
   syncChip(acc);
   $('#loader').hidden = false;

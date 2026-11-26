@@ -2,6 +2,7 @@
 // animaciones de captura de movimiento (caminar, correr, sentarse, hablar) y ajustes en tiempo real.
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { buildEditableAvatar } from './editable-avatar.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 export const MODELS = {
@@ -64,6 +65,7 @@ export function preloadAvatars() {
 
 // ---------- construir una persona ----------
 export function buildAvatar(cfg0) {
+  if (cfg0?.kind === 'editable') return buildEditableAvatar(cfg0);
   const c = normalize(cfg0);
   const root = SkeletonUtils.clone(DATA.fbx[c.model]);
   let head, mesh;
