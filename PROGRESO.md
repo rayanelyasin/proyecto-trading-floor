@@ -12,8 +12,8 @@ Los tres edificios son interiores del mismo motor 3D de Pulso (`js/scene.js`): m
 - **Mi oficina IA (piso 6, `js/oficina-ai-data.js`):** los 26 agentes del artefacto, cada uno en su escritorio y departamento (Creación, Negocio, Pedidos, Crecimiento) y el director al fondo. Quioscos de Nuevo trabajo (17 flujos que los agentes simulan con burbujas), Mi negocio y Entregas. Cada agente abre su ficha (puesto, qué hace, qué entrega y en qué trabajos participa). La aplicación original con todas sus funciones sigue en `#/ai-full`.
 
 ## Realismo, movimiento y editor de avatar
-- **Calidad por dispositivo** (): Auto, Alta, Media o Baja, elegible en Controles (edificios) y en Lugares (campus). Ajusta resolución, tamaño de sombras, antialiasing, materiales físicos y relieves. Cambiarla recarga la página.
-- **Materiales** (): suelo y escritorios de madera barnizada con relieve, metal cepillado, tela con brillo suave, cuero, vidrio con reflejos (transmisión real en calidad alta) y sombras de contacto bajo el mobiliario.
+- **Calidad por dispositivo** (`js/quality.js`): Auto, Alta, Media o Baja, elegible en Controles (edificios) y en Lugares (campus). Ajusta resolución, tamaño de sombras, antialiasing, materiales físicos y relieves. Cambiarla recarga la página.
+- **Materiales** (`js/scene.js`): suelo y escritorios de madera barnizada con relieve, metal cepillado, tela con brillo suave, cuero, vidrio con reflejos (transmisión real en calidad alta) y sombras de contacto bajo el mobiliario.
 - **Estaciones de trading** con tres monitores en arco, un monitor superior, lámpara, teclado y notas; el puesto del jugador se usa sentado. Pizarras y paquetes por departamento en Mi oficina IA.
 - **Movimiento:** al interactuar con «Tu puesto» o «Tu escritorio» te deslizas a la silla y te sientas con transición; te levantas al moverte. Los agentes se levantan, cruzan la oficina esquivando muebles, visitan estaciones o a otros agentes y vuelven a sentarse.
 - **Cámara:** girar (arrastrar), acercar y alejar (rueda, pellizco y botones) y seguir al personaje.
