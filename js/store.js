@@ -1,0 +1,38 @@
+// Estado persistente en el navegador (en producción: base de datos del servidor).
+const KEY = 'pulso:v1';
+
+const defaults = () => ({
+  profile: null,
+  accounts: {},            // usuario -> { salt, hash, name, avatar }
+  session: null,
+  role: 'dueno',
+  progress: {},            // courseId -> [índices completados]
+  reminders: [],           // ids de salas
+  customRooms: [],
+  customCourses: [],
+  alerts: [
+    { id: 'al1', symbol: 'BTCUSDT', type: 'rsi_above', value: 70, tf: '1h', active: true },
+    { id: 'al2', symbol: 'ETHUSDT', type: 'price_below', value: 0, active: true, auto: 0.97 },
+    { id: 'al3', symbol: 'PAXGUSDT', type: 'price_above', value: 0, active: false, auto: 1.01 },
+  ],
+  alertLog: [],
+  connections: { tradingview: true, exchange: false },
+  activity: [],
+});
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return { ...defaults(), ...JSON.parse(raw) };
+  } catch { /* almacenamiento no disponible */ }
+  return defaults();
+}
+
+export const store = load();
+export function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(store)); } catch { /* ignorar */ }
+}
+export function reset() {
+  try { localStorage.removeItem(KEY); } catch {}
+  location.reload();
+}
