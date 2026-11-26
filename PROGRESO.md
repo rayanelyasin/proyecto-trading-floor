@@ -25,6 +25,7 @@ Los tres edificios son interiores del mismo motor 3D de Pulso (`js/scene.js`): m
 - **Tecleo** al estar sentado (jugador y agentes): ráfagas de muñeca y antebrazo sobre la pose sentada (`typeOnKeyboard` en `js/human.js`).
 - **Corrección:** estando sentado, elegir otro destino ahora te levanta y camina (antes la ruta fallaba porque el escritorio bloqueaba el asiento).
 - Las fichas de agentes de los pisos 5 y 6 muestran «Modo simulado».
+- Probado: editor abierto desde el campus con el personaje actual, cambio de mentón guardado y conservado tras recargar; ficha de agente en 375 px sin desbordes.
 
 ## Probado en el navegador (escritorio y 375 px)
 - Campus: puertas, aviso «Entrar», acceso rápido, entrada y salida de los tres edificios, minimapa, lugares del dueño guardados en el navegador y en el servidor.
