@@ -96,9 +96,12 @@ const pairs = {
 export function updateEditableAvatar(avatar, config) {
   const c = normalizeEditable(config);
   avatar.config = c;
-  avatar.group.scale.setScalar(c.height);
-  avatar.height = 1.67 * c.height;
-  const weights = { age_old: c.age * 0.8 };
+  const height = (c.height - 1) / 0.12;
+  const weights = {
+    age_old: c.age * 0.8,
+    height_short: Math.max(0, -height) * 0.8,
+    height_tall: Math.max(0, height) * 0.8,
+  };
   for (const [key, [low, high]] of Object.entries(pairs)) {
     const factor = key === 'shape' ? 0.65 : 0.8;
     weights[low] = Math.max(0, -c[key]) * factor;
@@ -109,7 +112,8 @@ export function updateEditableAvatar(avatar, config) {
     const [a, b] = name.slice(5).split('__');
     weights[name] = (weights[a] ?? 0) * (weights[b] ?? 0);
   }
-  updateJointOffsets(avatar, weights);
+  const headOffset = updateJointOffsets(avatar, weights);
+  avatar.height = 1.67 + headOffset;
   for (const mesh of avatar.meshes) {
     for (const [name, i] of Object.entries(mesh.morphTargetDictionary ?? {})) {
       const [a, b] = name.startsWith('corr_') ? name.slice(5).split('__') : [];
@@ -207,6 +211,7 @@ function updateJointOffsets(avatar, weights) {
       skeleton.boneInverses[i].copy(rest[i]).multiply(translation.makeTranslation(-x, -y, -z));
     });
   }
+  return worldOffsets.get('head')?.y ?? 0;
 }
 
 function aim(root, from, to, direction) {

@@ -19,8 +19,8 @@ export const OPTIONS = {
 };
 export const DEFAULT_AVATAR = { gender: 'f', model: 'Female_Adult_01', height: 1, build: 1, skin: '#ffffff', hairTint: '#ffffff', accessory: 'none', topColor: '#d9bf8c' };
 
-function normalize(c0) {
-  const c = { ...DEFAULT_AVATAR, ...c0 };
+export function normalizeLegacyAvatar(c0) {
+  const c = { ...DEFAULT_AVATAR, ...c0, kind: 'legacy' };
   if (c.model?.startsWith('Male')) c.gender = 'm'; else if (c.model?.startsWith('Female')) c.gender = 'f';
   if (c.gender !== 'm') c.gender = 'f';
   if (!MODELS[c.gender].includes(c.model)) c.model = MODELS[c.gender][0];
@@ -66,7 +66,7 @@ export function preloadAvatars() {
 // ---------- construir una persona ----------
 export function buildAvatar(cfg0) {
   if (cfg0?.kind === 'editable') return buildEditableAvatar(cfg0);
-  const c = normalize(cfg0);
+  const c = normalizeLegacyAvatar(cfg0);
   const root = SkeletonUtils.clone(DATA.fbx[c.model]);
   let head, mesh;
   root.traverse((o) => { if (o.isSkinnedMesh) mesh = o; if (o.isBone && o.name === 'Bip01_Head') head = o; });

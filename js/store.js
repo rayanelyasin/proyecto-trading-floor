@@ -23,7 +23,14 @@ const defaults = () => ({
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...defaults(), ...JSON.parse(raw) };
+    if (raw) {
+      const state = { ...defaults(), ...JSON.parse(raw) };
+      for (const account of Object.values(state.accounts)) {
+        if (account?.avatar && !account.avatar.kind) account.avatar.kind = 'legacy';
+      }
+      if (state.profile?.avatar && !state.profile.avatar.kind) state.profile.avatar.kind = 'legacy';
+      return state;
+    }
   } catch { /* almacenamiento no disponible */ }
   return defaults();
 }

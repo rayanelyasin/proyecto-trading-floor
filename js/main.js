@@ -2,10 +2,10 @@ import { loadEditableAvatar } from './editable-avatar.js';
 import { store, save } from './store.js';
 import { MEMBERS, COURSES, AGENTS, NPC_LINES } from './data.js';
 import { market, startTicker, SYMBOLS, fmt } from './market.js';
-import { initUI, onZone, onInteract, onChat, onFloor, onView, refreshWall, icon } from './ui.js';
+import { initUI, onZone, onInteract, onChat, onFloor, onView, refreshWall, icon, toast } from './ui.js';
 import { authFlow, currentAccount, saveAvatar, logout } from './auth.js';
 import { openCreator } from './creator.js';
-import { preloadAvatars } from './human.js';
+import { preloadAvatars, randomAvatar } from './human.js';
 
 const $ = (s) => document.querySelector(s);
 let world = null;
@@ -34,8 +34,12 @@ function route() {
 addEventListener('hashchange', route);
 
 // ---------- cuenta y personaje ----------
-function syncChip(acc) {
-  $('#meChip').innerHTML = `<i style="background:${acc.avatar.topColor}"></i><span>${acc.name}</span>`;
+function syncChip(name, color) {
+  const dot = document.createElement('i');
+  dot.style.backgroundColor = color;
+  const label = document.createElement('span');
+  label.textContent = name;
+  $('#meChip').replaceChildren(dot, label);
 }
 addEventListener('pulso:edit-profile', async () => {
   const acc = currentAccount(); if (!acc) return;
@@ -67,15 +71,13 @@ async function enterApp() {
     $('#loader').hidden = false;
     try { await loadEditableAvatar(avatar); } catch (error) {
       console.error(error);
-      const { randomAvatar } = await import('./human.js');
       avatar = randomAvatar(acc.username);
-      const { toast } = await import('./ui.js');
       toast('No se pudo cargar tu avatar', 'Puedes reintentar al editar tu personaje.');
     } finally { $('#loader').hidden = true; }
   }
   store.profile = { name: acc.name, color: avatar.topColor, avatar };
   save();
-  syncChip(acc);
+  syncChip(acc.name, avatar.topColor);
   $('#loader').hidden = false;
   try {
     const { createWorld } = await import('./scene.js');

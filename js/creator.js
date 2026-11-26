@@ -1,7 +1,7 @@
 // Creador de personaje: vista 3D en vivo + controles de cuerpo, rostro, pelo, ropa y extras.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildAvatar, animateAvatar, randomAvatar, OPTIONS, DEFAULT_AVATAR, MODELS } from './human.js';
+import { buildAvatar, animateAvatar, randomAvatar, normalizeLegacyAvatar, OPTIONS, MODELS } from './human.js';
 
 import {
   BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, HAIR, SHOES, TOPS,
@@ -31,7 +31,8 @@ const MODERN_TABS = [
 // Devuelve { avatar, name } al guardar, o null si se cancela.
 export function openCreator({ initial, name = '', first = false } = {}) {
   return new Promise((resolve) => {
-    let legacy = { ...DEFAULT_AVATAR, ...randomAvatar(), ...(initial?.kind === 'editable' ? {} : initial) };
+    const savedLook = initial?.kind !== 'editable' && initial ? initial : randomAvatar();
+    let legacy = normalizeLegacyAvatar(savedLook);
     let editable = normalizeEditable(initial?.kind === 'editable' ? initial : {});
     let modern = !initial || initial.kind === 'editable';
     let cfg = modern ? editable : legacy;
@@ -145,7 +146,7 @@ export function openCreator({ initial, name = '', first = false } = {}) {
       raf = requestAnimationFrame(loop);
       const dt = Math.min((t - last) / 1000, 0.05); last = t;
       const w = canvas.clientWidth, h = canvas.clientHeight;
-      if (canvas.width !== Math.floor(w * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+      if (w && h && (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio()))) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
       if (!dragging) yaw += dt * 0.35;
       holder.rotation.y = yaw;
       const H = (fake.model?.height || 1.8);
@@ -225,7 +226,7 @@ export function openCreator({ initial, name = '', first = false } = {}) {
         for (const [key, , min, max] of controls) cfg[key] = +(min + (max - min) * Math.random()).toFixed(2);
         cfg.hair = HAIR[Math.floor(Math.random() * HAIR.length)][0];
       } else {
-        legacy = randomAvatar();
+        legacy = normalizeLegacyAvatar(randomAvatar());
         cfg = legacy;
       }
       rebuild();
