@@ -4,28 +4,40 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildAvatar, randomAvatar, animateAvatar } from './human.js';
+import { walkingPath } from './floor-path.js';
 
 const W = 40, D = 30;
 const BX = W / 2 - 0.7, BZ = D / 2 - 0.7;
 const GOLD = '#d9bf8c', UP = '#4fd1a1', DOWN = '#f06272', INK = '#111214';
 
 const KIOSK_Z = [-5, -1.5, 2, 5.5];
-export const FLOORS = [{ n: 1, name: 'Clases' }, { n: 2, name: 'Análisis' }, { n: 3, name: 'Conferencias' }, { n: 4, name: 'Juegos' }];
+export const FLOORS = [
+  { n: 1, name: 'Clases', description: 'Aula, biblioteca y cursos', color: '#d9bf8c' },
+  { n: 2, name: 'Análisis', description: 'Mercado, seguimiento y alertas', color: '#99c0aa' },
+  { n: 3, name: 'Conferencias', description: 'Programa, tarima y audiencia', color: '#a7b7d2' },
+  { n: 4, name: 'Juegos', description: 'Arcade, reflejos y memoria', color: '#d9a294' },
+];
 const ZONES_BY = {
   1: [
-    { id: 'aula', label: 'Aula', panel: 'salas', x: -10, z: -8, r: 4.8 },
-    { id: 'videoteca', label: 'Videoteca', panel: 'videoteca', x: -17, z: -1, r: 2.6 },
-    ...KIOSK_Z.map((z, i) => ({ id: `kiosk-${i}`, label: 'Curso', panel: 'cursos', arg: i, x: 16.6, z, r: 1.6 })),
+    { id: 'aula', label: 'Aula', detail: 'Clases y sesiones de la comunidad', panel: 'salas', x: -10, z: -8, r: 4.8 },
+    { id: 'biblioteca', label: 'Biblioteca', detail: 'Glosario y cuaderno de estudio', panel: 'biblioteca', x: 8.8, z: -8.2, r: 2.3, station: [8.8, -10.05] },
+    { id: 'videoteca', label: 'Videoteca', detail: 'Grabaciones y videos', panel: 'videoteca', x: -17, z: -1, r: 2.6 },
+    ...KIOSK_Z.map((z, i) => ({ id: `kiosk-${i}`, label: 'Curso', detail: 'Lecciones y progreso', panel: 'cursos', arg: i, x: 16.6, z, r: 1.6 })),
   ],
   2: [
-    { id: 'mercado', label: 'Muro de mercado', panel: 'analisis', x: 8, z: -8.8, r: 4.2 },
-    { id: 'agentes', label: 'Mesa de análisis', panel: 'agentes', x: -10, z: 8, r: 4.4 },
-    { id: 'alertas', label: 'Panel de alertas', panel: 'alertas', x: 8, z: 13.4, r: 1.9 },
+    { id: 'mercado', label: 'Muro de mercado', detail: 'Gráficos, indicadores y calculadora', panel: 'analisis', x: 8, z: -8.8, r: 4.2 },
+    { id: 'seguimiento', label: 'Seguimiento', detail: 'Activos favoritos y sus precios', panel: 'seguimiento', x: -11.5, z: -2.0, r: 2.2, station: [-11.5, -3.65] },
+    { id: 'agentes', label: 'Mesa de análisis', detail: 'Lecturas de los agentes de Pulso', panel: 'agentes', x: -10, z: 8, r: 4.4 },
+    { id: 'alertas', label: 'Panel de alertas', detail: 'Avisos de precio e indicadores', panel: 'alertas', x: 8, z: 13.4, r: 1.9 },
   ],
-  3: [{ id: 'tarima', label: 'Tarima', panel: 'conferencia', x: 0, z: -12.2, r: 3.4 }],
+  3: [
+    { id: 'programa', label: 'Programa', detail: 'Sesiones del auditorio y guardados', panel: 'programa', x: -12, z: 9.2, r: 2.2, station: [-12, 10.95, Math.PI, 1.65] },
+    { id: 'tarima', label: 'Tarima', detail: 'Presentación, pantalla y audiencia', panel: 'conferencia', x: 0, z: -12.2, r: 3.4 },
+  ],
   4: [
-    { id: 'arcade', label: 'Arcade', panel: 'juegos', arg: 0, x: -9.3, z: -12.4, r: 4.4 },
-    { id: 'pingpong', label: 'Ping-pong', panel: 'juegos', arg: 1, x: 6, z: 3, r: 3.4 },
+    { id: 'arcade', label: 'Arcade', detail: 'Predice la dirección de las velas', panel: 'juegos', arg: 0, x: -9.3, z: -12.4, r: 4.4 },
+    { id: 'pingpong', label: 'Reflejos', detail: 'Reto de 30 segundos junto al ping-pong', panel: 'juegos', arg: 1, x: 6, z: 3, r: 3.4 },
+    { id: 'memoria', label: 'Memoria', detail: 'Encuentra las parejas de símbolos', panel: 'juegos', arg: 2, x: -15, z: 4.7, r: 2.1, station: [-15, 6.15, Math.PI] },
   ],
 };
 
@@ -584,6 +596,45 @@ export function createWorld(container, opts) {
   { const gr = new THREE.Mesh(new THREE.PlaneGeometry(6, 5), new THREE.MeshStandardMaterial({ map: tex(rugCanvas()), roughness: 1 })); gr.rotation.x = -Math.PI / 2; gr.position.set(14.8, 0.012, 4); gr.receiveShadow = true; scene.add(gr); }
   spot(4, [14.8, 4], [2, 6.5], [-8, 8]);
 
+  for (const floorInfo of FLOORS) {
+    useFloor(floorInfo.n);
+    for (const zone of ZONES_BY[floorInfo.n]) {
+      if (!zone.station) continue;
+      const [x, z, angle = 0, height = 1.59] = zone.station;
+      if (zone.id !== 'programa') {
+        box(1.75, 0.10, 0.65, M.walnut, x, 0.06, z, 0.03);
+        box(1.26, 1.25, 0.38, M.metal, x, 0.70, z, 0.035);
+        box(1.32, 0.035, 0.42, M.brass, x, 1.31, z, 0.01);
+        ob(floorInfo.n, x, z, 1.55, 0.58);
+        spot(floorInfo.n, [zone.x, zone.z]);
+        const mat = new THREE.MeshStandardMaterial({ color: floorInfo.color, roughness: 0.96 });
+        const inlay = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.045), mat);
+        inlay.rotation.x = -Math.PI / 2;
+        inlay.position.set(x, 0.014, z + Math.cos(angle) * 0.53);
+        inlay.receiveShadow = true;
+        scene.add(inlay);
+      }
+      const sign = makeScreen(1.80, 0.79, 512);
+      sign.mesh.position.set(x, height, z + 0.23 * Math.cos(angle));
+      sign.mesh.rotation.y = angle;
+      sign.mesh.rotation.x = -0.08 * Math.cos(angle);
+      const { ctx, canvas } = sign;
+      bg(ctx, canvas.width, canvas.height, '#242620', '#171716');
+      ctx.fillStyle = floorInfo.color;
+      ctx.fillRect(0, 0, 8, canvas.height);
+      ctx.font = '600 24px Inter, sans-serif';
+      ctx.fillText(floorInfo.name.toUpperCase(), 34, 53);
+      ctx.fillStyle = '#f1e7d7';
+      ctx.font = '500 54px Georgia, serif';
+      ctx.fillText(zone.label, 34, 121, canvas.width - 68);
+      ctx.fillStyle = '#c2b9a9';
+      ctx.font = '500 24px Inter, sans-serif';
+      ctx.fillText('Pulsa E para abrir', 34, 172);
+      sign.texture.needsUpdate = true;
+      tag(sign.mesh, zone.id);
+    }
+  }
+
   useFloor(0);
 
   // ---------- colisiones, puntos de paseo y entradas por piso ----------
@@ -679,12 +730,16 @@ export function createWorld(container, opts) {
 
   // ---------- control ----------
   const keys = new Set();
+  let paused = false;
   const isTyping = () => /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   const onKey = (e) => {
-    if (isTyping()) return;
     const k = e.key.toLowerCase();
+    if (e.type === 'keyup') { keys.delete(k); return; }
+    if (paused || isTyping() || e.defaultPrevented || e.target.closest?.('#drawer, #chat, dialog')) return;
+    if ((k === 'enter' || k.startsWith('arrow')) && e.target.closest?.('button, a, summary')) return;
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
-      if (e.type === 'keydown') { keys.add(k); me.target = null; pendingZone = null; marker.visible = false; } else keys.delete(k);
+      keys.add(k);
+      clearNavigation();
       e.preventDefault();
     }
     if (e.type === 'keydown' && (k === 'e' || k === 'enter') && currentZone) opts.onInteract?.(currentZone);
@@ -693,11 +748,13 @@ export function createWorld(container, opts) {
   };
   addEventListener('keydown', onKey);
   addEventListener('keyup', onKey);
-  addEventListener('blur', () => keys.clear());
+  const clearKeys = () => keys.clear();
+  addEventListener('blur', clearKeys);
 
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
   let pendingZone = null;
+  let waypoints = [];
   let down = null;
   const marker = new THREE.Mesh(new THREE.RingGeometry(0.18, 0.24, 40), new THREE.MeshBasicMaterial({ color: GOLD, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
   marker.rotation.x = -Math.PI / 2; marker.visible = false; scene.add(marker);
@@ -734,34 +791,47 @@ export function createWorld(container, opts) {
   });
   renderer.domElement.addEventListener('wheel', (e) => { zoom = THREE.MathUtils.clamp(zoom + Math.sign(e.deltaY) * 0.08, 0.5, 1.5); e.preventDefault(); }, { passive: false });
 
-  function moveTo(x, z) {
-    x = THREE.MathUtils.clamp(x, -BX, BX); z = THREE.MathUtils.clamp(z, -BZ, BZ);
-    me.target = new THREE.Vector3(x, 0, z);
+  function clearNavigation() {
+    me.target = null;
+    waypoints = [];
     pendingZone = null;
-    marker.position.set(x, 0.02, z); marker.visible = true;
+    marker.visible = false;
+  }
+  function moveTo(x, z) {
+    clearNavigation();
+    const end = { x: THREE.MathUtils.clamp(x, -BX, BX), z: THREE.MathUtils.clamp(z, -BZ, BZ) };
+    const path = walkingPath(me.group.position, end, BX, BZ, (x0, z0) => blocked(x0, z0, 0.40));
+    if (!path.length) return false;
+    waypoints = path.map((point) => new THREE.Vector3(point.x, 0, point.z));
+    me.target = waypoints.shift();
+    marker.position.set(end.x, groundY(fl, end.x, end.z) + 0.02, end.z);
+    marker.visible = true;
+    return true;
   }
   function goToZone(zone) {
-    if (currentZone?.id === zone.id) { opts.onInteract?.(zone); return; }
-    const p = approachPoint(zone);
-    moveTo(p.x, p.z);
+    if (currentZone?.id === zone.id) { opts.onInteract?.(zone); return true; }
+    const point = approachPoint(zone);
+    if (!moveTo(point.x, point.z)) return false;
     pendingZone = zone;
+    return true;
   }
   function approachPoint(zone) {
     if (zone.id.startsWith('kiosk')) return { x: zone.x, z: zone.z };
-    return { aula: { x: -10, z: -10.6 }, mercado: { x: 8, z: -9.3 }, agentes: { x: -10, z: 8.4 }, alertas: { x: 8, z: 13.4 }, videoteca: { x: -17.2, z: -1 }, tarima: { x: 0, z: -12.5 }, arcade: { x: -9.3, z: -11.8 }, pingpong: { x: 6, z: 4.9 } }[zone.id] || { x: zone.x, z: zone.z };
+    return { aula: { x: -10, z: -4.6 }, mercado: { x: 8, z: -9.3 }, agentes: { x: -10, z: 8.4 }, alertas: { x: 8, z: 13.4 }, videoteca: { x: -17.2, z: -1 }, tarima: { x: 0, z: -12.5 }, arcade: { x: -9.3, z: -11.8 }, pingpong: { x: 6, z: 4.9 } }[zone.id] || { x: zone.x, z: zone.z };
   }
 
   // ---------- movimiento ----------
   const tmp = new THREE.Vector3();
-  function step(av, dir, dt) {
+  function step(av, dir, dt, maxDistance = Infinity) {
     if (dir.lengthSq() < 1e-6) return false;
     dir.normalize();
     const p = av.group.position;
-    const dx = dir.x * av.speed * dt, dz = dir.z * av.speed * dt;
+    const distance = Math.min(av.speed * dt, maxDistance);
+    const dx = dir.x * distance, dz = dir.z * distance;
     let moved = false;
     if (!blocked(p.x + dx, p.z + dz, 0.32, av.floor)) { p.x += dx; p.z += dz; moved = true; }
-    else if (!blocked(p.x + dx, p.z, 0.32, av.floor)) { p.x += dx; moved = true; }
-    else if (!blocked(p.x, p.z + dz, 0.32, av.floor)) { p.z += dz; moved = true; }
+    else if (Math.abs(dx) > 1e-6 && !blocked(p.x + dx, p.z, 0.32, av.floor)) { p.x += dx; moved = true; }
+    else if (Math.abs(dz) > 1e-6 && !blocked(p.x, p.z + dz, 0.32, av.floor)) { p.z += dz; moved = true; }
     p.y = groundY(av.floor, p.x, p.z);
     const ang = Math.atan2(dir.x, dir.z);
     let diff = Math.atan2(Math.sin(ang - av.group.rotation.y), Math.cos(ang - av.group.rotation.y));
@@ -780,8 +850,14 @@ export function createWorld(container, opts) {
     if (tmp.lengthSq()) walking = step(me, tmp, dt);
     else if (me.target) {
       tmp.subVectors(me.target, me.group.position); tmp.y = 0;
-      if (tmp.length() < 0.12) { me.target = null; marker.visible = false; }
-      else { walking = step(me, tmp, dt); if (!walking) { me.target = null; marker.visible = false; } }
+      const remaining = tmp.length();
+      if (remaining < 0.022) {
+        me.target = waypoints.shift() ?? null;
+        marker.visible = Boolean(me.target);
+      } else {
+        walking = step(me, tmp, dt, remaining);
+        if (!walking) clearNavigation();
+      }
     }
     animate(me, walking, dt);
   }
@@ -841,8 +917,10 @@ export function createWorld(container, opts) {
     }
     const o = zoneRing.material.opacity, t = currentZone ? 0.35 + Math.sin(now / 700) * 0.08 : 0;
     zoneRing.material.opacity = o + (t - o) * Math.min(1, dt * 6);
-    if (pendingZone && currentZone?.id === pendingZone.id && !me.target) {
-      const z = pendingZone; pendingZone = null; opts.onInteract?.(z);
+    if (pendingZone && currentZone?.id === pendingZone.id) {
+      const zone = pendingZone;
+      clearNavigation();
+      opts.onInteract?.(zone);
     }
   }
 
@@ -991,6 +1069,8 @@ export function createWorld(container, opts) {
       if (z.id.startsWith('kiosk')) continue;
       mctx.strokeStyle = currentZone?.id === z.id ? GOLD : 'rgba(217,191,140,0.25)'; mctx.lineWidth = 1.2;
       mctx.beginPath(); mctx.arc(sx(z.x), sz(z.z), (z.r / W) * w, 0, Math.PI * 2); mctx.stroke();
+      mctx.fillStyle = GOLD;
+      mctx.fillRect(sx(z.x) - 1.5, sz(z.z) - 1.5, 3, 3);
     }
     for (const a of npcs.filter((n) => n.floor === fl)) { mctx.fillStyle = a.color; mctx.beginPath(); mctx.arc(sx(a.group.position.x), sz(a.group.position.z), 3, 0, Math.PI * 2); mctx.fill(); }
     const p = me.group.position;
@@ -1022,6 +1102,7 @@ export function createWorld(container, opts) {
     if (!running) return;
     requestAnimationFrame(loop);
     const dt = Math.min(clock.getDelta(), 0.05);
+    if (paused) return;
     const now = performance.now();
     updateMe(dt);
     for (const n of npcs) if (n.floor === fl) updateNpc(n, dt, now);
@@ -1057,17 +1138,20 @@ export function createWorld(container, opts) {
 
   // ---------- pisos y vistas ----------
   const CENTER = new THREE.Vector3(0, 0, 0);
-  const floorMats = { wood: M.floor, carpet: M.carpet };
+  const marketFloor = M.floor.clone(), gamesFloor = M.floor.clone();
+  marketFloor.color.set('#aaa5a0');
+  gamesFloor.color.set('#b8aaa1');
+  const floorMats = { 1: M.floor, 2: marketFloor, 3: M.carpet, 4: gamesFloor };
   function setFloor(n) {
     if (n === fl || !FL[n]) return;
     fl = n; me.floor = n;
     for (const k of [1, 2, 3, 4]) FL[k].visible = k === n;
-    floor.material = n === 3 ? floorMats.carpet : floorMats.wood;
+    floor.material = floorMats[n];
     for (const a of npcs) { const on = a.floor === n; a.group.visible = on; a.label.visible = on; }
     const sp = SPAWN[n];
     me.group.position.set(sp.x, groundY(n, sp.x, sp.z), sp.z);
     yaw = Math.PI; azim = 0; me.group.rotation.y = Math.PI;
-    me.target = null; pendingZone = null; marker.visible = false;
+    clearNavigation();
     currentZone = null; zoneRing.material.opacity = 0; opts.onZone?.(null);
     camTarget.copy(me.group.position); camera.position.copy(me.group.position).add(camOffset);
     opts.onFloor?.(n);
@@ -1091,8 +1175,17 @@ export function createWorld(container, opts) {
   return {
     me, npcs, say, FLOORS, VIEWS, setFloor, setView, floorNpcs, applause, get floor() { return fl; }, get view() { return view; },
     get currentZone() { return currentZone; },
-    goToZone(id) { for (const n of [1, 2, 3, 4]) { const z = ZONES_BY[n].find((x) => x.id === id); if (z) { setFloor(n); goToZone(z); return; } } },
-    teleport(id) { const z = ZONES_BY[fl].find((x) => x.id === id); if (!z) return; const p = approachPoint(z); me.group.position.set(p.x, 0, p.z); me.target = null; marker.visible = false; },
+    setPaused(value) { paused = value; keys.clear(); },
+    destinations: () => ZONES_BY[fl],
+    cancelNavigation: clearNavigation,
+    goToZone(id) {
+      for (const { n } of FLOORS) {
+        const zone = ZONES_BY[n].find((entry) => entry.id === id);
+        if (zone) { setFloor(n); return goToZone(zone); }
+      }
+      return false;
+    },
+    teleport(id) { const z = ZONES_BY[fl].find((x) => x.id === id); if (!z) return; const p = approachPoint(z); me.group.position.set(p.x, 0, p.z); clearNavigation(); },
     nearby(radius = 7) { return npcs.filter((n) => n.floor === fl && dist(n, me) < radius).sort((a, b) => dist(a, me) - dist(b, me)); },
     distanceTo(av) { return dist(av, me); },
     zoneOf(av) { const p = av.group.position; return (ZONES_BY[av.floor] || []).find((z) => Math.hypot(p.x - z.x, p.z - z.z) < z.r) || null; },
@@ -1112,7 +1205,7 @@ export function createWorld(container, opts) {
       } else { screenVideo = null; aulaScreen.mat.map = aulaScreen.texture; confScreen.mat.map = confScreen.texture; aulaScreen.mat.needsUpdate = confScreen.mat.needsUpdate = true; drawSlide(); }
     },
     setMe({ name, color }) { me.name = name; me.el.querySelector('.name').innerHTML = `<i style="background:${color}"></i>${escapeHtml(name)}`; },
-    dispose() { running = false; removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); renderer.dispose(); },
+    dispose() { running = false; removeEventListener('keydown', onKey); removeEventListener('keyup', onKey); removeEventListener('blur', clearKeys); renderer.dispose(); },
   };
 }
 

@@ -18,6 +18,7 @@ const defaults = () => ({
   alertLog: [],
   connections: { tradingview: true, exchange: false },
   activity: [],
+  floorTools: {},           // usuario -> notas, activos, sesiones y récord de memoria
 });
 
 function load() {

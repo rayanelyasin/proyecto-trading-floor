@@ -1,244 +1,458 @@
-// Creador de personaje: vista 3D en vivo + controles de cuerpo, rostro, pelo, ropa y extras.
-import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildAvatar, animateAvatar, randomAvatar, normalizeLegacyAvatar, OPTIONS, MODELS } from './human.js';
-
+import { buildAvatar, normalizeLegacyAvatar, randomAvatar, preloadAvatars, OPTIONS, MODELS } from './human.js';
 import {
-  BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, HAIR, SHOES, TOPS,
+  BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, FACE_GROUPS, HAIR, SHOES, TOPS,
   loadEditableAvatar, normalizeEditable, updateEditableAvatar,
 } from './editable-avatar.js';
+import { createAvatarStage } from './creator-stage.js';
+import { LOOKS, PALETTES } from './creator-catalog.js';
+import { icon } from './ui.js';
+import { escapeHtml as esc } from './scene.js';
 
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const SECTIONS = {
+  editable: [
+    ['looks', 'Estilo', 'cube'], ['body', 'Cuerpo', 'person'], ['face', 'Rostro', 'eye'],
+    ['hair', 'Peinado', 'person'], ['clothes', 'Ropa', 'videoteca'],
+  ],
+  legacy: [['looks', 'Galería', 'miembros'], ['body', 'Cuerpo', 'person'], ['extras', 'Extras', 'cube']],
+};
 
-const TABS = [
-  ['Looks prediseñados', [['choice', 'gender', 'Género', OPTIONS.gender], ['gallery', 'model', 'Elige tu look (rostro, peinado y ropa)']]],
-  ['Cuerpo', [['range', 'height', 'Altura', 0.92, 1.08], ['range', 'build', 'Complexión', 0.92, 1.12], ['swatch', 'skin', 'Tono de piel (tinte)', OPTIONS.skin], ['swatch', 'hairTint', 'Tinte de pelo', OPTIONS.hairTint]]],
-  ['Extras', [['choice', 'accessory', 'Accesorios', OPTIONS.accessory]]],
-];
+const WARDROBE = {
+  top: { title: 'Prendas', options: TOPS, colorKey: 'topColor' },
+  bottom: { title: 'Parte inferior', options: BOTTOMS, colorKey: 'bottomColor' },
+  shoes: { title: 'Calzado', options: SHOES, colorKey: 'shoeColor' },
+};
 
-const rangeControls = (rows) => rows.map(([key, label, min, max]) => ['range', key, label, min, max]);
-const MODERN_TABS = [
-  ['Cuerpo', [...rangeControls(BODY_CONTROLS), ['color', 'skin', 'Tono de piel']]],
-  ['Rostro', [...rangeControls(FACE_CONTROLS), ['color', 'eyeColor', 'Color de ojos']]],
-  ['Peinado', [['choice', 'hair', 'Estilo', HAIR], ['color', 'hairTint', 'Color de pelo']]],
-  ['Ropa', [
-    ['choice', 'top', 'Parte superior o vestido', TOPS], ['color', 'topColor', 'Color de la parte superior'],
-    ['choice', 'bottom', 'Parte inferior', BOTTOMS], ['color', 'bottomColor', 'Color de la parte inferior'],
-    ['choice', 'shoes', 'Calzado', SHOES], ['color', 'shoeColor', 'Color del calzado'],
-  ]],
-];
+const LEGACY_BODY = [['height', 'Altura', 0.92, 1.08], ['build', 'Complexión', 0.92, 1.12]];
 
-// Devuelve { avatar, name } al guardar, o null si se cancela.
-export function openCreator({ initial, name = '', first = false } = {}) {
-  return new Promise((resolve) => {
-    const savedLook = initial?.kind !== 'editable' && initial ? initial : randomAvatar();
-    let legacy = normalizeLegacyAvatar(savedLook);
-    let editable = normalizeEditable(initial?.kind === 'editable' ? initial : {});
-    let modern = !initial || initial.kind === 'editable';
-    let cfg = modern ? editable : legacy;
-    let tabs = modern ? MODERN_TABS : TABS;
-    let tab = 0;
+function choices(options, attr, value, label) {
+  return `<div class="cr-pills" role="group" aria-label="${label}">${options.map(([key, text]) =>
+    `<button type="button" data-${attr}="${key}" aria-pressed="${key === value}">${text}</button>`).join('')}</div>`;
+}
 
-    const dlg = document.createElement('dialog');
-    dlg.className = 'dialog creator';
-    dlg.innerHTML = `
-      <div class="cr-grid">
-        <div class="cr-preview"><canvas></canvas><div class="cr-hint">Arrastra para girar</div></div>
-        <div class="cr-panel">
-          <h2>${first ? 'Diseña tu personaje' : 'Editar personaje'}</h2>
-          <label class="cr-name">Nombre visible<input id="crName" maxlength="18" value="${esc(name)}" placeholder="Cómo te verán los demás"></label>
-          <div class="cr-choices" aria-label="Tipo de personaje">
-            <button type="button" class="chip" data-mode="editable">Personalizado</button>
-            <button type="button" class="chip" data-mode="legacy">Looks prediseñados</button>
-          </div>
-          <div class="cr-tabs" role="tablist"></div>
-          <div class="cr-controls"></div><p class="cr-status muted" role="status" hidden></p>
-          <div class="row gap cr-actions">
-            <button type="button" class="btn" id="crRandom">Aleatorio</button>
-            ${first ? '' : '<button type="button" class="btn" id="crCancel">Cancelar</button>'}
-            <button type="button" class="btn primary grow" id="crSave">${first ? 'Entrar al piso' : 'Guardar'}</button>
+function card({ key, value, label, image, selected, kind = '' }) {
+  return `<button class="cr-card ${kind}" type="button" data-k="${key}" data-v="${value}" aria-pressed="${selected}" aria-label="${esc(label)}">
+    <span class="cr-card-image"><img src="${image}" alt="" decoding="async" draggable="false"></span>
+    <span class="cr-card-label">${esc(label)}</span>
+    <span class="cr-card-check" aria-hidden="true">${icon('check')}</span>
+  </button>`;
+}
+
+function valueLabel(key, value) {
+  if (key === 'age') return `${Math.round(value * 100)} %`;
+  const number = Math.round((key === 'height' || key === 'build' ? value - 1 : value) * 100);
+  return number === 0 ? '0' : number > 0 ? `+${number}` : `−${-number}`;
+}
+
+function sliders(config, rows) {
+  return `<div class="cr-sliders">${rows.map(([key, label, min, max]) => {
+    const value = Number(config[key]);
+    const neutral = key === 'height' || key === 'build' ? 1 : 0;
+    const safeValue = Number.isFinite(value) ? value : neutral;
+    const id = `crRange-${key}`;
+    return `<div class="cr-slider">
+      <label for="${id}">${label}</label>
+      <output for="${id}">${valueLabel(key, safeValue)}</output>
+      <input type="range" id="${id}" min="${min}" max="${max}" step="0.01" value="${safeValue}" data-k="${key}" data-range>
+      <button class="cr-icon" type="button" data-reset="${key}" data-neutral="${neutral}" title="Restablecer ${label.toLowerCase()}" aria-label="Restablecer ${label.toLowerCase()}">↺</button>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function colors(key, label, palette, value, custom = true) {
+  const chosen = palette.find(([color]) => color === value)?.[1] ?? 'Personalizado';
+  return `<section class="cr-colors" aria-label="${label}">
+    <div class="cr-field-title"><h4>${label}</h4><span data-color-name="${key}">${chosen}</span></div>
+    <div class="cr-swatches">${palette.map(([color, name]) => `<button type="button" class="cr-swatch" style="--swatch:${color}" aria-label="${name}" title="${name}" data-k="${key}" data-v="${color}" data-color-option aria-pressed="${color === value}">
+      <span class="cr-swatch-check" aria-hidden="true">${icon('check')}</span></button>`).join('')}
+    ${custom ? `<label class="cr-custom-color" title="Elegir otro color"><span aria-hidden="true">+</span><input type="color" aria-label="${label} personalizado" value="${esc(value)}" data-k="${key}" data-color></label>` : ''}
+    </div>
+  </section>`;
+}
+
+const paletteFor = (key) => PALETTES[key] ?? PALETTES.fabric;
+const legacyColors = (key) => OPTIONS[key].map((color, i) => [color, `${i + 1}`]);
+const lookIsActive = (look, config) => Object.entries(look.avatar).every(([key, value]) => config[key] === value);
+const choose = (options) => options[Math.floor(Math.random() * options.length)];
+
+function panelContent(mode, section, category, config) {
+  if (mode === 'legacy') {
+    if (section === 'body') return `<h3>Cuerpo</h3>${sliders(config, LEGACY_BODY)}${colors('skin', 'Tinte de piel', legacyColors('skin'), config.skin, false)}${colors('hairTint', 'Tinte de pelo', legacyColors('hairTint'), config.hairTint, false)}`;
+    if (section === 'extras') return `<h3>Accesorios</h3>${choices(OPTIONS.accessory, 'accessory', config.accessory, 'Accesorios')}`;
+    const gallery = MODELS[config.gender].map((value, index) => card({
+      key: 'model', value, label: `Look ${index + 1}`, image: `assets/rb/thumbs/${value}.jpg`,
+      selected: config.model === value, kind: 'cr-legacy-card',
+    }));
+    return `<h3>Looks prediseñados</h3>${choices(OPTIONS.gender, 'gender', config.gender, 'Galería')}<div class="cr-cards">${gallery.join('')}</div>`;
+  }
+
+  if (section === 'body') {
+    return `<h3>Cuerpo</h3>${sliders(config, BODY_CONTROLS)}${colors('skin', 'Tono de piel', PALETTES.skin, config.skin)}`;
+  }
+  if (section === 'face') {
+    const [, , rows] = FACE_GROUPS.find(([key]) => key === category.face);
+    return `<h3>Rostro</h3>${choices(FACE_GROUPS, 'face', category.face, 'Rasgos faciales')}
+      ${sliders(config, rows)}${category.face === 'eyes' ? colors('eyeColor', 'Color de ojos', PALETTES.eyeColor, config.eyeColor) : ''}`;
+  }
+  if (section === 'hair') {
+    return `<h3>Peinado</h3>${colors('hairTint', 'Color de pelo', PALETTES.hairTint, config.hairTint)}
+      <div class="cr-cards cr-items">${HAIR.map(([value, label]) => card({
+        key: 'hair', value, label, image: `assets/creator/hair-${value}.webp`, selected: config.hair === value,
+      })).join('')}</div>`;
+  }
+  if (section === 'clothes') {
+    const slots = [['top', 'Arriba'], ['bottom', 'Abajo'], ['shoes', 'Calzado']];
+    const { title, options, colorKey } = WARDROBE[category.clothes];
+    const disabled = category.clothes === 'bottom' && config.top === 'dress';
+    return `<h3>Vestuario</h3>${choices(slots, 'clothes', category.clothes, 'Sección de vestuario')}
+      ${disabled ? '<p class="cr-note">El vestido ocupa las dos zonas. Elige otra prenda de arriba para combinar una parte inferior.</p>' : `
+        <h4>${title}</h4>
+        <div class="cr-cards cr-items">${options.map(([value, label]) => card({
+          key: category.clothes, value, label, image: `assets/creator/clothes-${value}.webp`, selected: config[category.clothes] === value,
+        })).join('')}</div>
+        ${colors(colorKey, 'Color de la prenda', PALETTES.fabric, config[colorKey])}`}`;
+  }
+  return `<h3>Elige un estilo</h3>
+    <div class="cr-cards cr-looks">${LOOKS.map((look) => card({
+      key: 'look', value: look.id, label: look.label, image: `assets/creator/look-${look.id}.webp`,
+      selected: lookIsActive(look, config),
+    })).join('')}</div>`;
+}
+
+const viewButton = (command, label, symbol) => `<button class="cr-icon" data-view-command="${command}" type="button" title="${label}" aria-label="${label}">${symbol}</button>`;
+
+function studioMarkup(first, name) {
+  return `
+    <header class="cr-header">
+      <div class="cr-brand"><span class="logo-mark" aria-hidden="true"></span><span>Pulso</span></div>
+      <h2 id="crTitle">Estudio de personajes</h2>
+      <button class="cr-icon cr-close" type="button" id="crClose" title="Cerrar" aria-label="Cerrar el estudio">${icon('x')}</button>
+    </header>
+    <div class="cr-grid">
+      <section class="cr-preview" aria-label="Vista previa">
+        <canvas tabindex="0" aria-label="Personaje en 3D. Usa las flechas izquierda y derecha para girar, y más y menos para acercar o alejar." aria-describedby="crHint"></canvas>
+        <div class="cr-stage-top">
+          ${choices([['full', 'Completo'], ['face', 'Rostro']], 'frame', 'full', 'Encuadre')}
+          <label class="cr-pose"><span class="cr-sr">Animación de prueba</span><select id="crPose">
+            <option value="idle">De pie</option><option value="walk">Caminar</option><option value="run">Correr</option>
+            <option value="sit">Sentarse</option><option value="talk">Hablar</option></select></label>
+        </div>
+        <div class="cr-status" role="status" hidden><span></span><button id="crRetry" class="btn sm" type="button" hidden>Reintentar</button></div>
+        <div class="cr-stage-bottom">
+          <p id="crHint">Arrastra para girar · rueda para acercar</p>
+          <div class="cr-view-tools" role="group" aria-label="Girar y acercar el personaje">
+            ${viewButton('left', 'Girar a la izquierda', icon('back'))}
+            ${viewButton('right', 'Girar a la derecha', icon('chev'))}
+            ${viewButton('out', 'Alejar', '−')}
+            ${viewButton('in', 'Acercar', '+')}
+            ${viewButton('reset', 'Restablecer vista', '↺')}
           </div>
         </div>
-      </div>`;
-    document.body.appendChild(dlg);
-    dlg.addEventListener('cancel', (e) => e.preventDefault());
-    dlg.showModal();
+      </section>
+      <section class="cr-panel" aria-label="Personalización">
+        <div class="cr-panel-top">
+          ${choices([['editable', 'Personalizado'], ['legacy', 'Prediseñados']], 'mode', 'editable', 'Tipo de personaje')}
+          <label class="cr-name" for="crName">Nombre visible <input id="crName" maxlength="18" value="${esc(name)}" required autocomplete="off"></label>
+        </div>
+        <div class="cr-tabs" role="tablist" aria-label="Secciones del creador"></div>
+        <div class="cr-controls" id="crPanelContent" role="tabpanel" tabindex="0"></div>
+      </section>
+    </div>
+    <footer class="cr-footer">
+      <div class="cr-edit-actions">
+        <button class="cr-icon" id="crUndo" type="button" title="Deshacer" aria-label="Deshacer" disabled>↶</button>
+        <button class="cr-icon" id="crRedo" type="button" title="Rehacer" aria-label="Rehacer" disabled>↷</button>
+        <button class="btn cr-random" type="button" id="crRandom">Aleatorio</button>
+      </div>
+      <div class="cr-save-actions">
+        <button class="btn ghost" type="button" id="crCancel">${first ? 'Volver' : 'Cancelar'}</button>
+        <button class="btn primary" type="button" id="crSave" disabled>${first ? 'Entrar al piso' : 'Guardar'} ${icon(first ? 'chev' : 'check')}</button>
+      </div>
+    </footer>`;
+}
 
-    // ----- vista previa 3D -----
-    const canvas = dlg.querySelector('canvas');
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.shadowMap.enabled = true;
-    const scene = new THREE.Scene();
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const room = new RoomEnvironment();
-    const environment = pmrem.fromScene(room, 0.04);
-    scene.environment = environment.texture;
-    room.dispose();
-    pmrem.dispose();
-    scene.add(new THREE.HemisphereLight(0xfff1e0, 0x2a2420, 0.5));
-    const key = new THREE.DirectionalLight(0xffe2bf, 2.2); key.position.set(2, 4, 3); key.castShadow = true; scene.add(key);
-    const rim = new THREE.DirectionalLight(0x9db4d8, 1.2); rim.position.set(-3, 2, -3); scene.add(rim);
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.9, 48), new THREE.MeshStandardMaterial({ color: 0x2a2724, roughness: 0.7 }));
-    disc.rotation.x = -Math.PI / 2; disc.receiveShadow = true; scene.add(disc);
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
-    let yaw = 0.35, dragging = false, lastX = 0, zoomF = 1;
-    const holder = new THREE.Group(); scene.add(holder);
-    const fake = { model: null, phase: 0 };
-
-    const status = dlg.querySelector('.cr-status');
-    const saveButton = dlg.querySelector('#crSave');
-    let request = 0;
-    const release = () => {
-      const model = fake.model;
-      if (!model) return;
-      model.mixer.stopAllAction();
-      model.mixer.uncacheRoot(model.root);
-      const materials = new Set();
-      model.root.traverse((obj) => {
-        if (!obj.isMesh) return;
-        if (obj.isSkinnedMesh) obj.skeleton.dispose();
-        else obj.geometry.dispose();
-        for (const material of [obj.material].flat()) materials.add(material);
-      });
-      for (const material of materials) material.dispose();
-      holder.clear();
-      fake.model = null;
+// Devuelve { avatar, name } al guardar o null si se cierra.
+export function openCreator({ initial, name = '', first = false } = {}) {
+  return new Promise((resolve) => {
+    let mode = initial && initial.kind !== 'editable' ? 'legacy' : 'editable';
+    let drafts = {
+      legacy: normalizeLegacyAvatar(mode === 'legacy' ? initial : randomAvatar()),
+      editable: normalizeEditable(initial?.kind === 'editable' ? initial : LOOKS[0].avatar),
     };
-    const rebuild = async () => {
-      const token = ++request;
+    const current = () => drafts[mode];
+    let section = 'looks';
+    const category = { face: 'structure', clothes: 'top' };
+    const history = [];
+    const redo = [];
+    let inputStart = null;
+
+    const dialog = document.createElement('dialog');
+    dialog.className = 'dialog creator';
+    dialog.setAttribute('aria-labelledby', 'crTitle');
+    dialog.innerHTML = studioMarkup(first, name);
+    document.body.append(dialog);
+    const find = (selector) => dialog.querySelector(selector);
+    const tabs = find('.cr-tabs');
+    const panel = find('.cr-controls');
+    const canvas = find('canvas');
+    const nameInput = find('#crName');
+    const saveButton = find('#crSave');
+    const undoButton = find('#crUndo');
+    const redoButton = find('#crRedo');
+    const status = find('.cr-status');
+    const retryButton = find('#crRetry');
+    let stage;
+    let webGLFailed = false;
+    let pending = null;
+    let renderedKey;
+    dialog.showModal();
+
+    function showStatus(message = '', retry = false) {
+      status.querySelector('span').textContent = message;
+      status.hidden = !message;
+      retryButton.hidden = !retry;
+    }
+
+    function webGLFailure() {
+      webGLFailed = true;
+      pending = null;
       saveButton.disabled = true;
-      status.hidden = !modern;
-      status.textContent = 'Cargando personaje…';
-      try {
-        if (modern) await loadEditableAvatar(cfg);
-        if (token !== request) return;
-        const model = buildAvatar(cfg);
-        release();
-        fake.model = model;
-        holder.add(model.group);
-        status.hidden = true;
+      showStatus('La vista 3D necesita WebGL. Cierra el estudio y vuelve a abrirlo en un navegador compatible.');
+    }
+
+    try {
+      stage = createAvatarStage(canvas, webGLFailure);
+    } catch (error) {
+      console.error(error);
+      webGLFailure();
+    }
+
+    function setFrame(frame) {
+      stage?.setFrame(frame);
+      for (const button of dialog.querySelectorAll('[data-frame]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.frame === frame));
+      }
+    }
+
+    function paintPanel({ top = false, focus = '' } = {}) {
+      const scroll = panel.scrollTop;
+      const available = SECTIONS[mode];
+      tabs.innerHTML = available.map(([id, label, symbol]) => `
+        <button id="crTab-${id}" type="button" role="tab" aria-selected="${section === id}"
+          aria-controls="crPanelContent" tabindex="${section === id ? 0 : -1}" data-section="${id}">
+          ${icon(symbol)}<span>${label}</span>
+        </button>`).join('');
+      panel.setAttribute('aria-labelledby', `crTab-${section}`);
+      for (const button of dialog.querySelectorAll('[data-mode]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+      }
+      panel.innerHTML = panelContent(mode, section, category, current());
+      panel.scrollTop = top ? 0 : scroll;
+      if (focus) find(focus)?.focus({ preventScroll: true });
+    }
+
+    function assetKey() {
+      const c = current();
+      if (mode === 'legacy') return JSON.stringify(c);
+      return [mode, c.hair, c.top, c.top === 'dress' ? null : c.bottom, c.shoes].join('|');
+    }
+
+    async function refreshPreview() {
+      if (webGLFailed) return;
+      const key = assetKey();
+      if (key === renderedKey) {
+        pending = null;
+        if (mode === 'editable') updateEditableAvatar(stage.model, current());
         saveButton.disabled = false;
-      } catch (error) {
-        if (token !== request) return;
-        console.error(error);
-        status.hidden = false;
-        status.textContent = 'No se pudo cargar el personaje. Cambia de opción para reintentar.';
-      }
-    };
-    const adjust = () => {
-      if (modern && !saveButton.disabled && fake.model?.config.kind === 'editable') {
-        updateEditableAvatar(fake.model, cfg);
-      } else if (!modern) {
-        rebuild();
-      }
-    };
-    canvas.addEventListener('pointerdown', (e) => { dragging = true; lastX = e.clientX; canvas.setPointerCapture(e.pointerId); });
-    canvas.addEventListener('pointermove', (e) => { if (dragging) { yaw += (e.clientX - lastX) * 0.012; lastX = e.clientX; } });
-    canvas.addEventListener('pointerup', () => { dragging = false; });
-    canvas.addEventListener('wheel', (e) => { zoomF = THREE.MathUtils.clamp(zoomF + Math.sign(e.deltaY) * 0.08, 0.55, 1.4); e.preventDefault(); }, { passive: false });
-
-    let raf = 0, last = performance.now(), alive = true;
-    const loop = (t) => {
-      if (!alive) return;
-      raf = requestAnimationFrame(loop);
-      const dt = Math.min((t - last) / 1000, 0.05); last = t;
-      const w = canvas.clientWidth, h = canvas.clientHeight;
-      if (w && h && (canvas.width !== Math.floor(w * renderer.getPixelRatio()) || canvas.height !== Math.floor(h * renderer.getPixelRatio()))) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
-      if (!dragging) yaw += dt * 0.35;
-      holder.rotation.y = yaw;
-      const H = (fake.model?.height || 1.8);
-      const face = modern && (tab === 1 || tab === 2);
-      const focus = face || zoomF < 0.8 ? H * 0.89 : H * 0.52;
-      camera.position.set(0, focus + 0.1, (H * (face ? 0.72 : 2.1)) * zoomF);
-      camera.lookAt(0, focus, 0);
-      animateAvatar(fake, false, 1, dt);
-      renderer.render(scene, camera);
-    };
-
-    // ----- controles -----
-    const box = dlg.querySelector('.cr-controls');
-    const paintControls = () => {
-      dlg.querySelector('.cr-tabs').innerHTML = tabs.map(([label], i) =>
-        `<button type="button" role="tab" data-t="${i}" aria-selected="${i === tab}" class="${i === tab ? 'on' : ''}">${label}</button>`).join('');
-      dlg.querySelectorAll('[data-mode]').forEach((button) => {
-        const selected = (button.dataset.mode === 'editable') === modern;
-        button.classList.toggle('on', selected);
-        button.setAttribute('aria-pressed', selected);
-      });
-      box.innerHTML = tabs[tab][1]
-        .filter(([, key]) => !modern || cfg.top !== 'dress' || !['bottom', 'bottomColor'].includes(key))
-        .map(([kind, key, label, a, b]) => {
-        if (kind === 'gallery') return `<div class="cr-group"><span class="lbl">${label}</span><div class="cr-gallery">${MODELS[cfg.gender].map((n) => `<button type="button" class="cr-th ${cfg.model === n ? 'on' : ''}" data-k="model" data-v="${n}" aria-label="${n}"><img src="assets/rb/thumbs/${n}.jpg" alt=""></button>`).join('')}</div></div>`;
-        if (kind === 'swatch') return `<div class="cr-group"><span class="lbl">${label}</span><div class="cr-swatches">${a.map((c) => `<button type="button" class="cr-sw ${cfg[key] === c ? 'on' : ''}" data-k="${key}" data-v="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('')}</div></div>`;
-        if (kind === 'color') return `<label class="cr-group"><span class="lbl">${label}</span><input type="color" value="${cfg[key]}" data-k="${key}" data-color></label>`;
-        if (kind === 'choice') return `<div class="cr-group"><span class="lbl">${label}</span><div class="cr-choices">${a.map(([v, l]) => `<button type="button" class="chip ${cfg[key] === v ? 'on' : ''}" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div></div>`;
-        return `<label class="cr-group"><span class="lbl">${label}</span><input type="range" min="${a}" max="${b}" step="0.01" value="${cfg[key]}" data-k="${key}" data-range></label>`;
-      }).join('');
-    };
-    dlg.addEventListener('click', (e) => {
-      const mode = e.target.closest('[data-mode]');
-      if (mode) {
-        modern = mode.dataset.mode === 'editable';
-        cfg = modern ? editable : legacy;
-        tabs = modern ? MODERN_TABS : TABS;
-        tab = 0;
-        paintControls();
-        rebuild();
+        showStatus();
         return;
       }
-      const t = e.target.closest('[data-t]');
-      if (t) { tab = +t.dataset.t; paintControls(); return; }
-      const option = e.target.closest('[data-k][data-v]');
-      if (option) {
-        const { k, v } = option.dataset;
-        cfg[k] = v;
-        if (k === 'gender') cfg.model = MODELS[v][0];
-        rebuild();
-        paintControls();
+      if (pending?.key === key) return;
+      const job = { key };
+      pending = job;
+      saveButton.disabled = true;
+      showStatus(stage.model ? 'Aplicando cambios…' : 'Cargando personaje…');
+      try {
+        if (mode === 'editable') await loadEditableAvatar(current());
+        else await preloadAvatars();
+        if (pending !== job) return;
+        stage.replace(buildAvatar(current()));
+        renderedKey = key;
+        saveButton.disabled = false;
+        showStatus();
+      } catch (error) {
+        if (pending !== job) return;
+        console.error(error);
+        showStatus('No se pudo cargar este aspecto.', true);
+      } finally {
+        if (pending === job) pending = null;
       }
-    });
-    dlg.addEventListener('input', ({ target }) => {
-      if (target.matches('[data-range], [data-color]')) {
-        cfg[target.dataset.k] = target.type === 'range' ? +target.value : target.value;
-        adjust();
+    }
+
+    const snapshot = () => ({ mode, drafts: { editable: { ...drafts.editable }, legacy: { ...drafts.legacy } } });
+    function updateHistoryButtons() {
+      undoButton.disabled = !history.length && !inputStart;
+      redoButton.disabled = !redo.length || Boolean(inputStart);
+    }
+    function record(before) {
+      if (JSON.stringify(before) !== JSON.stringify(snapshot())) {
+        history.push(before);
+        if (history.length > 40) history.shift();
+        redo.length = 0;
+      }
+      updateHistoryButtons();
+    }
+    function finishInput() {
+      if (!inputStart) return;
+      const before = inputStart;
+      inputStart = null;
+      record(before);
+    }
+    function mutate(action, options) {
+      finishInput();
+      const before = snapshot();
+      action();
+      record(before);
+      paintPanel(options);
+      refreshPreview();
+    }
+    function restore(from, to) {
+      finishInput();
+      if (!from.length) return;
+      const entry = from.pop();
+      to.push(snapshot());
+      if (mode !== entry.mode) {
+        section = 'looks';
+        setFrame('full');
+      }
+      mode = entry.mode;
+      drafts = entry.drafts;
+      updateHistoryButtons();
+      paintPanel();
+      refreshPreview();
+    }
+
+    function openSection(id) {
+      finishInput();
+      section = id;
+      setFrame(id === 'face' || id === 'hair' ? 'face' : 'full');
+      paintPanel({ top: true, focus: `[data-section="${id}"]` });
+    }
+
+    dialog.addEventListener('click', ({ target }) => {
+      const button = target.closest('button');
+      if (!button) return;
+      const data = button.dataset;
+      if (data.mode && data.mode !== mode) {
+        mutate(() => { mode = data.mode; section = 'looks'; setFrame('full'); }, { top: true });
+      } else if (data.section) {
+        openSection(data.section);
+      } else if (data.face || data.clothes) {
+        finishInput();
+        const group = data.face ? 'face' : 'clothes';
+        category[group] = data[group];
+        paintPanel({ top: true, focus: `[data-${group}="${data[group]}"]` });
+      } else if (data.k && data.v !== undefined) {
+        mutate(() => {
+          if (data.k === 'look') drafts.editable = { ...LOOKS.find((look) => look.id === data.v).avatar };
+          else current()[data.k] = data.v;
+        }, { focus: `[data-k="${data.k}"][data-v="${data.v}"]` });
+      } else if (data.reset) {
+        mutate(() => { current()[data.reset] = Number(data.neutral); }, { focus: `[data-reset="${data.reset}"]` });
+      } else if (data.gender || data.accessory) {
+        mutate(() => {
+          if (data.gender && current().gender !== data.gender) {
+            current().gender = data.gender;
+            current().model = MODELS[data.gender][0];
+          } else if (data.accessory) current().accessory = data.accessory;
+        });
+      } else if (data.frame) {
+        setFrame(data.frame);
+      } else if (stage && data.viewCommand) {
+        const commands = {
+          left: () => stage.rotate(-1), right: () => stage.rotate(1),
+          in: () => stage.magnify(-0.12), out: () => stage.magnify(0.13), reset: stage.reset,
+        };
+        commands[data.viewCommand]();
       }
     });
 
-    const close = (val) => {
-      ++request;
-      alive = false;
-      cancelAnimationFrame(raf);
-      release();
-      environment.dispose();
-      disc.geometry.dispose();
-      disc.material.dispose();
-      renderer.dispose();
-      dlg.close();
-      dlg.remove();
-      resolve(val);
-    };
-    dlg.querySelector('#crRandom').onclick = () => {
-      if (modern) {
-        const controls = [...BODY_CONTROLS, ...FACE_CONTROLS];
-        for (const [key, , min, max] of controls) cfg[key] = +(min + (max - min) * Math.random()).toFixed(2);
-        cfg.hair = HAIR[Math.floor(Math.random() * HAIR.length)][0];
+    dialog.addEventListener('input', ({ target }) => {
+      if (!target.matches('[data-range], [data-color]')) return;
+      inputStart ??= snapshot();
+      updateHistoryButtons();
+      const { k: key } = target.dataset;
+      current()[key] = target.type === 'range' ? Number(target.value) : target.value;
+      if (target.type === 'range') {
+        const label = valueLabel(key, current()[key]);
+        target.closest('.cr-slider').querySelector('output').value = label;
+        target.setAttribute('aria-valuetext', label);
       } else {
-        legacy = normalizeLegacyAvatar(randomAvatar());
-        cfg = legacy;
+        const palette = paletteFor(key);
+        find(`[data-color-name="${key}"]`).textContent = palette.find(([color]) => color === target.value)?.[1] ?? 'Personalizado';
+        for (const button of panel.querySelectorAll(`[data-color-option][data-k="${key}"]`)) {
+          button.setAttribute('aria-pressed', String(button.dataset.v === target.value));
+        }
       }
-      rebuild();
-      paintControls();
+      refreshPreview();
+    });
+
+    dialog.addEventListener('change', ({ target }) => {
+      if (target.matches('[data-range], [data-color]')) finishInput();
+      if (target.id === 'crPose') stage?.setPose(target.value);
+    });
+
+    dialog.addEventListener('keydown', (event) => {
+      if (event.target.dataset.section && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+        const ids = SECTIONS[mode].map(([id]) => id);
+        const index = ids.indexOf(section);
+        const next = { ArrowLeft: (index - 1 + ids.length) % ids.length, ArrowRight: (index + 1) % ids.length, Home: 0, End: ids.length - 1 };
+        event.preventDefault();
+        openSection(ids[next[event.key]]);
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && event.target !== nameInput) {
+        event.preventDefault();
+        if (event.shiftKey) restore(redo, history);
+        else restore(history, redo);
+      }
+      event.stopPropagation();
+    });
+
+    const close = (result) => {
+      pending = null;
+      stage?.dispose();
+      dialog.close();
+      dialog.remove();
+      resolve(result);
     };
-    dlg.querySelector('#crCancel')?.addEventListener('click', () => close(null));
-    dlg.querySelector('#crSave').onclick = () => {
-      const nm = dlg.querySelector('#crName').value.trim();
-      if (!nm) { dlg.querySelector('#crName').focus(); dlg.querySelector('.cr-name').classList.add('err'); return; }
-      close({ avatar: modern ? normalizeEditable(cfg) : { ...cfg }, name: nm });
+    retryButton.onclick = refreshPreview;
+    undoButton.onclick = () => restore(history, redo);
+    redoButton.onclick = () => restore(redo, history);
+    find('#crRandom').onclick = () => mutate(() => {
+      if (mode === 'legacy') {
+        drafts.legacy = normalizeLegacyAvatar(randomAvatar());
+        return;
+      }
+      const c = { ...choose(LOOKS).avatar };
+      for (const [key, , min, max] of [...BODY_CONTROLS, ...FACE_CONTROLS]) {
+        c[key] = Math.max(min, Math.min(max, Number((c[key] + (Math.random() - 0.5) * (max - min) * 0.35).toFixed(2))));
+      }
+      c.hair = choose(HAIR)[0];
+      drafts.editable = c;
+    });
+    find('#crCancel').onclick = find('#crClose').onclick = () => close(null);
+    dialog.addEventListener('cancel', (event) => { event.preventDefault(); close(null); });
+    nameInput.addEventListener('input', () => nameInput.setCustomValidity(''));
+    saveButton.onclick = () => {
+      const visibleName = nameInput.value.trim();
+      if (!visibleName) {
+        nameInput.setCustomValidity('Escribe un nombre para tu personaje.');
+        nameInput.reportValidity();
+        return;
+      }
+      close({ avatar: mode === 'editable' ? normalizeEditable(current()) : normalizeLegacyAvatar(current()), name: visibleName });
     };
 
-    rebuild(); paintControls(); requestAnimationFrame(loop);
+    paintPanel();
+    refreshPreview();
   });
 }

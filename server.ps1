@@ -1,11 +1,22 @@
 # Servidor estático mínimo para probar Pulso en local: http://localhost:5173
-param([int]$Port = 5173)
+param([int]$Port = 5173, [switch]$OpenBrowser)
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add("http://localhost:$Port/")
-$listener.Start()
-Write-Host "Pulso en http://localhost:$Port"
-$types = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.svg'='image/svg+xml'; '.png'='image/png'; '.json'='application/json'; '.ico'='image/x-icon'; '.mp4'='video/mp4' }
+$url = "http://localhost:$Port/"
+$listener.Prefixes.Add($url)
+try {
+  $listener.Start()
+} catch {
+  Write-Error "No se pudo abrir Pulso en el puerto $Port. Cierra el servidor anterior si sigue abierto. $($_.Exception.Message)"
+  exit 1
+}
+Write-Host "Pulso en $url"
+if ($OpenBrowser) { Start-Process $url }
+$types = @{
+  '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8'
+  '.svg'='image/svg+xml'; '.png'='image/png'; '.jpg'='image/jpeg'; '.webp'='image/webp'
+  '.glb'='model/gltf-binary'; '.json'='application/json'; '.ico'='image/x-icon'; '.mp4'='video/mp4'
+}
 while ($listener.IsListening) {
   $ctx = $listener.GetContext()
   try {

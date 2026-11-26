@@ -3,26 +3,44 @@
 Demo funcional de una plataforma para comunidades de trading.
 
 ## Cómo abrirlo
-Doble clic en **Abrir Pulso.cmd** (abre http://localhost:5173). Para cerrarlo, cierra la ventana negra.
 
-## Creador de personajes
+En Windows, haz doble clic en **Abrir Pulso.cmd** y abre http://localhost:5173. Para cerrarlo, cierra la ventana del servidor. En macOS o Linux, ejecuta `python3 -m http.server 5173 --bind 127.0.0.1` desde la carpeta del proyecto.
 
-**Personalizado** permite ajustar forma corporal, altura, edad adulta, peso, musculatura y ocho rasgos del rostro. Incluye color de piel, iris y pelo, ocho peinados y opción de rapado. La ropa tiene colores independientes y alternativas por zona. Hay camiseta, camisa, sudadera, vestido, pantalón, short, falda, zapatos y botines. El vestido ocupa las dos zonas de ropa y conserva la elección de parte inferior para cuando vuelvas a usar una parte superior independiente.
+Se necesita un navegador con WebGL y acceso a internet para las bibliotecas del CDN y el mercado. Conserva el mismo navegador, perfil y dirección para abrir tus cuentas y progreso locales después de instalar una actualización.
 
-**Looks prediseñados** conserva los 22 avatares Rocketbox, sus ajustes y accesorios. Las cuentas anteriores se abren con su look guardado. Solo cambian de modo al guardar un personaje del otro tipo.
+## Estudio de personajes
 
-En Linux puedes servir la carpeta del proyecto con `python -m http.server 5173 --bind 127.0.0.1` y abrir http://localhost:5173.
+Al crear una cuenta se abre el estudio. Si ya tienes cuenta, entra al piso y pulsa tu nombre en la barra superior.
+
+- **Personalizado** ofrece seis estilos de partida, seis ajustes corporales, trece controles faciales, ocho peinados más rapado y nueve opciones de ropa y calzado. Los colores se ajustan por separado. El vestido ocupa las zonas de arriba y abajo y conserva tu elección de parte inferior.
+- **Prediseñados** conserva los 22 avatares de Rocketbox, sus ajustes y accesorios. Las cuentas anteriores se abren con su look guardado.
+- Puedes rotar el personaje, acercarte al rostro, probar animaciones y deshacer o rehacer cambios antes de guardar. Con el lienzo enfocado, las flechas izquierda y derecha giran el personaje y `+` y `-` controlan el zoom.
+
+## Actividades por piso
+
+Abre **Explorar piso** para entrar directamente a una actividad o caminar hasta su estación.
+
+| Piso | Actividades añadidas |
+| --- | --- |
+| Clases | Biblioteca con glosario filtrable y un cuaderno de estudio local |
+| Análisis | Lista de seguimiento con favoritos y acceso al análisis del activo |
+| Conferencias | Programa de ejemplo del auditorio con sesiones guardadas |
+| Juegos | Memoria de seis parejas con récord local |
+
+El explorador y los clics en el suelo calculan un camino alrededor del mobiliario. Los favoritos, apuntes, sesiones guardadas y récord de Memoria se guardan por cuenta en este navegador.
 
 ## Qué es real y qué es de ejemplo
 | Real | De ejemplo |
 |---|---|
-| Precios en vivo (API pública de Binance, sin clave) | Miembros, salas, cursos y grabaciones |
+| Precios de Binance cuando está disponible (API pública, sin clave) | Miembros, salas, cursos y grabaciones |
 | Velas, MM50/200, RSI, ATR, soportes/resistencias y escenarios calculados | Agenda de noticias |
 | Calculadora de riesgo | Webhook de TradingView y exchange (simulados) |
 | Alertas de precio y RSI que se evalúan en vivo | Chat: los demás miembros son bots |
 | Compartir pantalla en el aula (solo la ves tú) | |
 | Subir y reproducir un video (local) | |
-| Progreso de cursos, alertas y ajustes (guardados en el navegador) | |
+| Progreso, avatar, favoritos y apuntes (guardados en el navegador) | |
+
+Cuando falla el proveedor de mercado, Pulso etiqueta los precios y las velas simuladas.
 
 ## Para llevarlo a producción
 - Multijugador real (posiciones y chat): servidor WebSocket (por ejemplo Colyseus o Supabase Realtime).
@@ -34,11 +52,12 @@ En Linux puedes servir la carpeta del proyecto con `python -m http.server 5173 -
 
 ## Estructura
 - `index.html`: portada y piso
-- `styles.css`: diseño
-- `js/scene.js`: mundo 3D (Three.js)
-- `js/creator.js`, `js/human.js`, `js/editable-avatar.js`: editor, avatares y animaciones.
+- `styles.css`, `floor.css`, `creator.css`: portada, interfaz del edificio y estudio
+- `js/scene.js`, `js/floor-path.js`: mundo 3D (Three.js) y rutas entre colisiones
+- `js/creator.js`, `js/creator-stage.js`, `js/creator-catalog.js`: estudio, vista 3D y catálogo.
+- `js/human.js`, `js/editable-avatar.js`: avatares, morphs, ropa y animaciones.
 - `js/market.js`: datos de mercado e indicadores
-- `js/ui.js`: paneles, chat, alertas y agentes
+- `js/ui.js`, `js/floor-activities.js`: paneles, chat y actividades
 - `js/data.js`: contenido de ejemplo
 - `server.ps1`: servidor local
 
@@ -51,4 +70,4 @@ Licencia en `assets/rb/LICENSE_Rocketbox_MIT.md`. Las texturas se redujeron a 10
 
 Base, morphs, texturas, piezas y esqueleto proceden de [MakeHuman Community](https://static.makehumancommunity.org/about/license.html) y de los archivos CC0 preparados por Kasper Olesen para [CharacterCreator](https://github.com/kblood/CharacterCreator/tree/852e48f316b90a0937234886630e4fb4cdfd1f78). Pulso distribuye los GLB adaptados y los datos de articulaciones, junto con los clips CC0 de reposo, marcha y carrera. Sentarse y hablar se resuelven mediante poses y gestos propios de Pulso. El código GPL del generador se queda fuera de la aplicación.
 
-Los GLB se adaptaron a Three.js r160 y se redujeron a los morphs y clips usados. El catálogo se descarga por selección. Consulta `assets/editable/UPSTREAM-LICENSES.md` para el origen y la licencia de cada pieza. La ropa se ajusta con morphs y pesos del esqueleto. Las faldas y el vestido pueden presentar intersecciones en poses extremas porque el piso no simula tela.
+Los GLB se adaptaron a Three.js r160 y se redujeron a los morphs y clips usados. Cada modelo de pelo o ropa se carga al seleccionarlo. Las miniaturas en `assets/creator/` se renderizaron a partir de esas piezas CC0. Consulta `assets/editable/UPSTREAM-LICENSES.md` para el origen y la licencia de cada pieza. La ropa se ajusta con morphs y pesos del esqueleto. Las faldas y el vestido pueden presentar intersecciones en poses extremas porque el piso no simula tela.

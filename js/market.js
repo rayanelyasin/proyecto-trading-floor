@@ -32,7 +32,8 @@ export function fmt(symbol, v) {
 export const fmtNum = (v, d = 2) => (v == null || Number.isNaN(v) ? '—' : Number(v).toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d }));
 
 // ---------- velas ----------
-const cache = new Map(); // `${sym}:${tf}` -> {at, candles}
+const cache = new Map(); // `${sym}:${tf}` -> {at, candles, live}
+export const candlesAreLive = (symbol, tf) => cache.get(`${symbol}:${tf}`)?.live === true;
 
 export async function getCandles(symbol, tf = '1h', limit = 300) {
   const key = `${symbol}:${tf}`;

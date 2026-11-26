@@ -58,19 +58,33 @@ const clothingOptions = { top: TOPS, bottom: BOTTOMS, shoes: SHOES };
 export const BODY_CONTROLS = [
   ['shape', 'Forma corporal', -1, 1], ['height', 'Altura', 0.88, 1.12],
   ['age', 'Edad adulta', 0, 1], ['weight', 'Peso', -1, 1], ['muscle', 'Musculatura', -1, 1],
+  ['proportions', 'Proporciones', -1, 1],
 ];
 
-export const FACE_CONTROLS = [
-  ['nose', 'Anchura de nariz', -1, 1], ['eyes', 'Tamaño de ojos', -1, 1],
-  ['jaw', 'Anchura de mandíbula', -1, 1], ['lips', 'Volumen de labios', -1, 1],
-  ['noseLength', 'Largo de nariz', -1, 1], ['eyeSpacing', 'Separación de ojos', -1, 1],
-  ['chin', 'Mentón', -1, 1], ['cheeks', 'Pómulos', -1, 1],
+export const FACE_GROUPS = [
+  ['structure', 'Estructura', [
+    ['jaw', 'Anchura de mandíbula', -1, 1], ['chin', 'Mentón', -1, 1],
+    ['cheeks', 'Pómulos', -1, 1], ['forehead', 'Frente', -1, 1],
+    ['ears', 'Tamaño de orejas', -1, 1],
+  ]],
+  ['eyes', 'Ojos', [
+    ['eyes', 'Tamaño de ojos', -1, 1], ['eyeSpacing', 'Separación de ojos', -1, 1],
+    ['eyeTilt', 'Inclinación de ojos', -1, 1],
+  ]],
+  ['nose', 'Nariz', [
+    ['nose', 'Anchura de nariz', -1, 1], ['noseLength', 'Largo de nariz', -1, 1],
+    ['noseHeight', 'Altura de nariz', -1, 1],
+  ]],
+  ['mouth', 'Boca', [
+    ['lips', 'Volumen de labios', -1, 1], ['mouthWidth', 'Anchura de boca', -1, 1],
+  ]],
 ];
+export const FACE_CONTROLS = FACE_GROUPS.flatMap(([, , controls]) => controls);
 
 const tintKeys = ['skin', 'eyeColor', 'hairTint', 'topColor', 'bottomColor', 'shoeColor'];
 
 export function normalizeEditable(config) {
-  const c = { ...EDITABLE_DEFAULT, ...config };
+  const c = { ...EDITABLE_DEFAULT, ...config, kind: 'editable' };
   for (const [key, , min, max] of [...BODY_CONTROLS, ...FACE_CONTROLS]) {
     c[key] = THREE.MathUtils.clamp(Number.isFinite(c[key]) ? c[key] : EDITABLE_DEFAULT[key] ?? 0, min, max);
   }
@@ -91,6 +105,12 @@ const pairs = {
   lips: ['face_lips_decr', 'face_lips_incr'], noseLength: ['face_nose_length_decr', 'face_nose_length_incr'],
   eyeSpacing: ['face_eye_spacing_decr', 'face_eye_spacing_incr'], chin: ['face_chin_decr', 'face_chin_incr'],
   cheeks: ['face_cheekbones_decr', 'face_cheekbones_incr'],
+  proportions: ['proportions_uncommon', 'proportions_ideal'],
+  forehead: ['face_forehead_decr', 'face_forehead_incr'],
+  ears: ['face_ear_size_decr', 'face_ear_size_incr'],
+  eyeTilt: ['face_eye_tilt_decr', 'face_eye_tilt_incr'],
+  noseHeight: ['face_nose_height_decr', 'face_nose_height_incr'],
+  mouthWidth: ['face_mouth_width_decr', 'face_mouth_width_incr'],
 };
 
 export function updateEditableAvatar(avatar, config) {
@@ -103,7 +123,7 @@ export function updateEditableAvatar(avatar, config) {
     height_tall: Math.max(0, height) * 0.8,
   };
   for (const [key, [low, high]] of Object.entries(pairs)) {
-    const factor = key === 'shape' ? 0.65 : 0.8;
+    const factor = key === 'shape' ? 0.65 : key === 'proportions' ? 0.55 : 0.8;
     weights[low] = Math.max(0, -c[key]) * factor;
     weights[high] = Math.max(0, c[key]) * factor;
   }
@@ -313,11 +333,20 @@ export function buildEditableAvatar(config) {
   mixer.update(0);
   const group = new THREE.Group();
   group.add(root);
+  const eyelids = meshes.flatMap((mesh) => ['blink_left', 'blink_right']
+    .map((name) => mesh.morphTargetDictionary?.[name])
+    .filter((index) => index !== undefined)
+    .map((index) => [mesh.morphTargetInfluences, index]));
+  let nextBlink = 1.8 + Math.random() * 3;
   const avatar = { group, root, mixer, actions, meshes, joints, skins,
     updateAnimation(dt) {
       for (const { bone, offset } of joints) bone.position.sub(offset);
       mixer.update(dt);
       for (const { bone, offset } of joints) bone.position.add(offset);
+      nextBlink -= dt;
+      if (nextBlink < -0.18) nextBlink = 2.3 + Math.random() * 3.2;
+      const blink = nextBlink < 0 ? Math.sin(-nextBlink / 0.18 * Math.PI) : 0;
+      for (const [influences, index] of eyelids) influences[index] = blink;
     },
   };
   updateEditableAvatar(avatar, c);

@@ -8,20 +8,21 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 - Abrir http://localhost:5173. No hay build ni tests automáticos: se verifica en el navegador.
 
 ## Mapa del código
-- `index.html`, `styles.css`: portada y HUD (pisos, vistas de cámara, dock, chat, panel lateral).
+- `index.html`, `styles.css`, `floor.css` y `creator.css`: portada, HUD y estudio de personajes.
 - `js/main.js`: rutas (`#/` portada, `#/piso` app), arranque, login y creador.
 - `js/auth.js`: cuentas locales (usuario + contraseña con PBKDF2) en localStorage. **Solo demo**: producción necesita servidor.
-- `js/creator.js`: creador de personaje con vista 3D previa.
+- `js/creator.js`: estudio de personajes y borradores. Usa `js/creator-stage.js` para la vista 3D y `js/creator-catalog.js` para los estilos y colores.
 - `js/human.js`: interfaz de avatares y estados de animación. Carga los looks Microsoft Rocketbox y dirige los avatares editables a `js/editable-avatar.js`.
 - `js/editable-avatar.js`: carga GLB local bajo demanda, aplica morphs, ajusta las articulaciones y equipa mallas de pelo y ropa sobre el mismo esqueleto.
 - `js/scene.js`: mundo 3D por pisos (`useFloor(n)`), muebles, colisiones (`OB`), puntos de paseo (`HS`), zonas (`ZONES_BY`), cámaras (primera persona, tercera, maqueta), pantallas con canvas.
-- `js/ui.js`: paneles (salas, cursos, videoteca, análisis, alertas, agentes, conferencia, juegos), chat, minijuegos.
+- `js/ui.js`: paneles, explorador del piso, chat, alertas y agentes. `js/floor-activities.js` contiene biblioteca, seguimiento, programa y memoria.
+- `js/floor-path.js`: búsqueda de una ruta con las colisiones de `js/scene.js` para el suelo, minimapa y destinos del explorador.
 - `js/market.js`: precios en vivo (API pública de Binance), velas, RSI, medias, soportes/resistencias, escenarios.
 - `js/data.js`: contenido de ejemplo (miembros, salas, cursos, agenda).
 - `js/store.js`: estado persistente en localStorage (clave `pulso:v1`).
 
 ## Convenciones
-- Para añadir algo a un piso: llamar `useFloor(n)` antes de crearlo, registrar obstáculos con `ob(...)`/`obC(...)` y puntos de paseo con `spot(...)`.
+- Para añadir algo a un piso: llamar `useFloor(n)` antes de crearlo, registrar obstáculos con `ob(...)`/`obC(...)` y puntos de paseo con `spot(...)`. Para un destino interactivo, añade su zona a `ZONES_BY`, su panel a `PANELS` y deja un punto de aproximación fuera de la colisión.
 - Medidas del mundo: 40 x 30 m (x de -20 a 20, z de -15 a 15). Los personajes miran hacia +Z.
 - No añadir luces puntuales sin necesidad (cada una encarece todos los materiales).
 - Mantener textos en español y la paleta carbón/dorado (`--accent`).
@@ -31,6 +32,7 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 - Los modelos originales vienen de https://github.com/microsoft/Microsoft-Rocketbox (FBX, esqueleto `Bip01`).
 
 - `assets/editable/`: GLB y datos de articulaciones CC0 de MakeHuman/MPFB2, preparados por Kasper Olesen (CharacterCreator) y adaptados para Pulso. Consulta `assets/editable/UPSTREAM-LICENSES.md` y el README para la revisión exacta. No se incluye código del generador.
+- `assets/creator/`: miniaturas renderizadas de las mallas CC0. La portada usa una captura de Pulso.
 - Los avatares editables usan movimientos CC0 propios de su rig para reposo, marcha y carrera. Pulso construye las poses de silla y los gestos de conversación. Los looks Rocketbox conservan sus clips FBX.
 
 ## Pendiente / ideas
@@ -41,13 +43,13 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 
 ## Estado actual (relevo entre IAs)
 Hecho y probado en navegador:
-- 4 pisos: 1 Clases, 2 Análisis, 3 Conferencias (tarima + audiencia sentada), 4 Sala de juegos (2 minijuegos). Selector a la derecha y teclas 1-4.
+- 4 pisos: 1 Clases, 2 Análisis, 3 Conferencias (tarima + audiencia sentada), 4 Sala de juegos (3 minijuegos). Selector a la derecha y teclas 1-4.
 - 3 vistas de cámara (tecla V): primera persona, tercera persona, maqueta.
-- Login local y creador con dos modos. Personalizado ofrece sliders de cuerpo y rostro, colores, ocho peinados más rapado y ropa modular. Looks prediseñados conserva los 22 modelos Rocketbox, sus tintes y sus accesorios.
-- Decoración por piso (biblioteca, centro de cómputo, trading desks, foyer, bar, casino, arcades).
+- Login local y creador con dos modos. Personalizado ofrece seis estilos de partida, controles de cuerpo y rostro, colores, pelo y ropa modular, deshacer/rehacer y vista de animaciones. Prediseñados conserva los 22 modelos Rocketbox, sus tintes y accesorios.
+- Estaciones físicas y explorador por piso. Biblioteca con notas, seguimiento con favoritos, programa con sesiones guardadas y Memoria con récord pertenecen a la cuenta local.
 
 Notas técnicas:
-- `preloadAvatars()` prepara los looks Rocketbox antes del creador y del mundo. `loadEditableAvatar()` prepara el GLB, el pelo y las prendas seleccionadas antes de construir el avatar editable.
+- `preloadAvatars()` prepara los looks Rocketbox cuando se necesitan en el estudio y antes de crear el mundo. `loadEditableAvatar()` prepara el GLB, pelo y prendas seleccionados. Al editar una cuenta existente se pausa el mundo 3D mientras se muestra la vista del estudio.
 - `js/store.js` marca los avatares anteriores como `kind: legacy` al leerlos, conservando sus campos. `normalizeLegacyAvatar()` aplica los valores de respaldo. Los nuevos personalizables se guardan con `kind: editable`.
 - `server.ps1` acepta `POST /__save?path=assets/...` solo para guardar archivos convertidos; es una herramienta local de desarrollo.
 - Repositorio: https://github.com/rayanelyasin/proyecto-trading-floor (rama `master`).

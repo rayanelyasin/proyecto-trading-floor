@@ -10,6 +10,7 @@ export const MODELS = {
   m: ['Male_Adult_01', 'Male_Adult_02', 'Male_Adult_03', 'Male_Adult_04', 'Male_Adult_06', 'Male_Adult_08', 'Male_Adult_09', 'Male_Adult_10', 'Male_Adult_12', 'Male_Adult_14', 'Male_Adult_17', 'Male_Adult_18'],
 };
 const ALL = [...MODELS.f, ...MODELS.m];
+const OPAQUE_MODELS = new Set(['Male_Adult_12', 'Male_Adult_14', 'Male_Adult_17', 'Male_Adult_18']);
 
 export const OPTIONS = {
   gender: [['f', 'Mujer'], ['m', 'Hombre']],
@@ -56,10 +57,14 @@ export function preloadAvatars() {
     }
     for (const n of ALL) {
       jobs.push(loadFbx(`assets/rb/avatars/${n}.fbx`).then((o) => { DATA.fbx[n] = o; const b = new THREE.Box3().setFromObject(o); DATA.h[n] = b.max.y * 0.01; }));
-      for (const [k, ext] of [['body', 'jpg'], ['head', 'jpg'], ['opacity', 'png']]) jobs.push(loadTex(`assets/rb/avatars/${n}_${k}.${ext}`).then((t) => { DATA.tex[`${n}_${k}`] = t; }).catch(() => {}));
+      const textures = [['body', 'jpg'], ['head', 'jpg']];
+      if (!OPAQUE_MODELS.has(n)) textures.push(['opacity', 'png']);
+      for (const [k, ext] of textures) {
+        jobs.push(loadTex(`assets/rb/avatars/${n}_${k}.${ext}`).then((t) => { DATA.tex[`${n}_${k}`] = t; }).catch(() => {}));
+      }
     }
     await Promise.all(jobs);
-  })();
+  })().catch((error) => { DATA.ready = null; throw error; });
   return DATA.ready;
 }
 

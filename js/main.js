@@ -15,6 +15,10 @@ document.querySelectorAll('[data-icon]').forEach((el) => { el.insertAdjacentHTML
 // ---------- precios en vivo (también en la portada) ----------
 startTicker();
 market.on((type) => {
+  if (type === 'status') {
+    const label = market.status === 'en vivo' ? 'En vivo' : market.status === 'simulado' ? 'Datos simulados' : 'Conectando…';
+    $('#heroMarketStatus').textContent = label;
+  }
   if (type !== 'tick') return;
   const el = $('#heroTicker');
   if (el) el.innerHTML = Object.entries(SYMBOLS).map(([k, v]) => {
@@ -39,13 +43,27 @@ function syncChip(name, color) {
   dot.style.backgroundColor = color;
   const label = document.createElement('span');
   label.textContent = name;
-  $('#meChip').replaceChildren(dot, label);
+  const chip = $('#meChip');
+  chip.replaceChildren(dot, label);
+  chip.insertAdjacentHTML('beforeend', icon('person'));
+  chip.setAttribute('aria-label', `Editar personaje de ${name}`);
 }
+let editing = false;
 addEventListener('pulso:edit-profile', async () => {
-  const acc = currentAccount(); if (!acc) return;
-  await preloadAvatars();
-  const r = await openCreator({ initial: acc.avatar, name: acc.name });
-  if (r) { saveAvatar(r.avatar, r.name); location.reload(); }
+  const account = currentAccount();
+  if (!account || editing) return;
+  editing = true;
+  world?.setPaused(true);
+  try {
+    const result = await openCreator({ initial: account.avatar, name: account.name });
+    if (result) {
+      saveAvatar(result.avatar, result.name);
+      location.reload();
+    }
+  } finally {
+    world?.setPaused(false);
+    editing = false;
+  }
 });
 $('#logoutBtn')?.addEventListener('click', () => { logout(); location.hash = '#/'; location.reload(); });
 
@@ -57,15 +75,14 @@ async function enterApp() {
   const back = () => { starting = false; location.hash = '#/'; };
   let acc = currentAccount() || (await authFlow());
   if (!acc) return back();
-  $('#loader').hidden = false;
-  try { await preloadAvatars(); } catch (e) { console.error(e); }
-  $('#loader').hidden = true;
   if (!acc.avatar) {
     const r = await openCreator({ name: acc.name, first: true });
     if (!r) return back();
     saveAvatar(r.avatar, r.name);
     acc = currentAccount();
   }
+  $('#loader').hidden = false;
+  try { await preloadAvatars(); } catch (error) { console.error(error); }
   let avatar = acc.avatar;
   if (avatar.kind === 'editable') {
     $('#loader').hidden = false;
