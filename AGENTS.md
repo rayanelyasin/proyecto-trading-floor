@@ -22,8 +22,8 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 - `js/store.js`: estado persistente en localStorage (clave `pulso:v1`).
 
 - `js/campus.js`, `js/campus-ui.js`, `js/campus-data.js`: campus 3D (#/campus), controles (teclado, mouse, táctil), lugares del dueño y su guardado (`/__campus`).
-- `js/lab.js`, `js/miner.js`, `lab.css`: edificio Laboratorio (#/lab) y motor de minería de estrategias (solo simulación).
-- `edificio-ai/`: edificio Mi oficina IA (#/ai), copia del artefacto con sus modelos. `js/floor-controls.js`: selector de controles de la oficina original.
+- `js/offices.js`, `js/lab.js`, `js/miner.js`: pisos 5 (Laboratorio) y 6 (Mi oficina IA) dentro del motor de scene.js, sus agentes y el motor de minería (solo simulación).
+- `edificio-ai/`: aplicación original de Mi oficina IA (#/ai-full) con sus modelos; `js/oficina-ai-data.js` tiene sus 26 agentes y 17 flujos. `js/floor-controls.js`: selector de controles de los edificios.
 - `PROGRESO.md`: estado del campus y bloqueos pendientes.
 
 ## Convenciones

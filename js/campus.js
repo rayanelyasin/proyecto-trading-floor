@@ -1,6 +1,8 @@
 // Campus 3D de Pulso: plaza, caminos, vegetación, estacionamiento y tres edificios con puerta propia.
 // Medidas: 120 x 120 m (x y z de -60 a 60). Se camina dentro de ±52 m. Los edificios miran hacia +Z.
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { buildAvatar, animateAvatar, randomAvatar } from './human.js';
 import { BUILDINGS, LAND_SLOTS } from './campus-data.js';
 
 // ---------- modos de control (se comparten con el resto de la app) ----------
@@ -71,24 +73,17 @@ function box(w, h, d, m, x, y, z, parent) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; parent?.add(mesh); return mesh;
 }
 
-// ---------- personas simples ----------
-function person(shirt = '#d9bf8c', skin = '#e0b894', pants = '#2c3340', hair = '#2a1d14') {
-  const g = new THREE.Group();
-  const torso = box(0.62, 0.78, 0.34, mat(shirt), 0, 1.25, 0, g);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), mat(skin)); head.position.y = 1.9; head.castShadow = true; g.add(head);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.52), mat(hair)); cap.position.y = 1.93; g.add(cap);
-  const legs = [-0.16, 0.16].map((x) => { const p = new THREE.Group(); p.position.set(x, 0.86, 0); box(0.26, 0.86, 0.28, mat(pants), 0, -0.43, 0, p); g.add(p); return p; });
-  const arms = [-0.41, 0.41].map((x) => { const p = new THREE.Group(); p.position.set(x, 1.58, 0); box(0.16, 0.7, 0.2, mat(shirt), 0, -0.33, 0, p); g.add(p); return p; });
-  void torso;
-  g.userData = { legs, arms, phase: Math.random() * 6 };
+// ---------- personas: los mismos avatares y animaciones que usan los edificios de Pulso ----------
+const shadowGeo = new THREE.CircleGeometry(0.42, 24), shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25, depthWrite: false });
+function walker(cfg, isMe = false) {
+  const model = buildAvatar(cfg), g = new THREE.Group();
+  g.add(model.group);
+  const sh = new THREE.Mesh(shadowGeo, shadowMat); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.05; g.add(sh);
+  if (isMe) { const ring = new THREE.Mesh(new THREE.RingGeometry(0.46, 0.5, 48), new THREE.MeshBasicMaterial({ color: 0xd9bf8c, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; g.add(ring); }
+  g.userData.av = { model, seated: false };
   return g;
 }
-function animatePerson(p, speed, dt) {
-  const u = p.userData; u.phase += dt * speed * 1.7;
-  const s = Math.sin(u.phase) * Math.min(1, speed / 3);
-  u.legs[0].rotation.x = s * 0.7; u.legs[1].rotation.x = -s * 0.7; u.arms[0].rotation.x = -s * 0.6; u.arms[1].rotation.x = s * 0.6;
-  p.children[0].position.y = 1.25 + Math.abs(s) * 0.03;
-}
+const animateWalker = (g, speed, dt) => animateAvatar(g.userData.av, speed > 0.05, Math.max(speed, 0.01), dt);
 function car(color) {
   const g = new THREE.Group();
   box(1.9, 0.6, 4.2, mat(color, { roughness: 0.35, metalness: 0.4 }), 0, 0.62, 0, g);
@@ -98,21 +93,23 @@ function car(color) {
 }
 
 // ---------- API del campus ----------
-export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {}) {
+export function createCampus(container, { me = {}, onEnter, onNear } = {}) {
   const coarse = matchMedia('(pointer: coarse)').matches;
   const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95; renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.domElement.style.cssText = 'display:block;width:100%;height:100%;touch-action:none';
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   const SKY = new THREE.Color('#cfe3ee');
   scene.background = SKY; scene.fog = new THREE.Fog(SKY, 90, 280);
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
-  scene.add(new THREE.HemisphereLight(0xdcecff, 0x6b8e5a, 1.15));
-  const sun = new THREE.DirectionalLight(0xfff0d2, 2.4);
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 600); // misma lente que la cámara de Pulso
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.3;
+  scene.add(new THREE.HemisphereLight(0xdcecff, 0x6b8e5a, 0.8));
+  const sun = new THREE.DirectionalLight(0xfff0d2, 2.2);
   sun.position.set(45, 70, 35); sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 10, far: 220 }); sun.shadow.bias = -0.0004;
   scene.add(sun);
@@ -317,17 +314,17 @@ export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {
   }
 
   // ---------- jugador, visitantes y marcador ----------
-  const player = person(me.color || '#d9bf8c');
+  const player = walker(me.avatar || randomAvatar('visitante'), true);
   player.position.set(0, 0, 42); player.rotation.y = Math.PI; scene.add(player);
   const npcs = Array.from({ length: 9 }, (_, i) => {
-    const p = person(pick(['#4a6fa5', '#b5651d', '#6b8f71', '#a05a7a', '#c9a461', '#5d6d7e']), pick(['#f0c8a0', '#d9a77d', '#a8734b', '#7a5236']), pick(['#2c3340', '#4b4337', '#27415a']), pick(['#2a1d14', '#7a5a2e', '#111']));
+    const p = walker(randomAvatar('visitante-' + i));
     const a = rand() * Math.PI * 2, r = 6 + rand() * 30; p.position.set(Math.cos(a) * r * 0.9, 0, 8 + Math.sin(a) * r * 0.6); scene.add(p);
     return { p, tx: p.position.x, tz: p.position.z, wait: rand() * 3, i };
   });
   const marker = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 24), new THREE.MeshBasicMaterial({ color: 0xd9bf8c, transparent: true, opacity: 0.9, side: THREE.DoubleSide })); marker.rotation.x = -Math.PI / 2; marker.visible = false; scene.add(marker);
 
   // ---------- control y bucle ----------
-  const st = { yaw: 0, pitch: 0.42, dist: 11, mode: getControlMode(), keys: new Set(), joy: { x: 0, y: 0 }, target: null, autoEnter: null, paused: false, near: null, speed: 0, picking: null, time: 0 };
+  const st = { yaw: 0, pitch: 0.785, dist: 15, mode: getControlMode(), keys: new Set(), joy: { x: 0, y: 0 }, target: null, autoEnter: null, paused: false, near: null, speed: 0, picking: null, time: 0 };
   const canvas = renderer.domElement;
 
   function hits(x, z, r) {
@@ -361,15 +358,15 @@ export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {
   canvas.addEventListener('pointerdown', (e) => { try { canvas.setPointerCapture(e.pointerId); } catch { /* sin captura */ } drag.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() }); if (drag.size === 2) pinch = null; });
   canvas.addEventListener('pointermove', (e) => {
     const d = drag.get(e.pointerId); if (!d) return;
-    if (drag.size === 2) { const [a, b] = [...drag.values()]; const dist = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) st.dist = Math.max(5, Math.min(26, st.dist * (pinch / dist))); pinch = dist; d.x = e.clientX; d.y = e.clientY; return; }
-    st.yaw -= (e.clientX - d.x) * 0.006; st.pitch = Math.max(0.12, Math.min(1.1, st.pitch + (e.clientY - d.y) * 0.004)); d.x = e.clientX; d.y = e.clientY;
+    if (drag.size === 2) { const [a, b] = [...drag.values()]; const dist = Math.hypot(a.x - b.x, a.y - b.y); if (pinch) st.dist = Math.max(7, Math.min(34, st.dist * (pinch / dist))); pinch = dist; d.x = e.clientX; d.y = e.clientY; return; }
+    st.yaw -= (e.clientX - d.x) * 0.006; st.pitch = Math.max(0.35, Math.min(1.25, st.pitch + (e.clientY - d.y) * 0.004)); d.x = e.clientX; d.y = e.clientY;
   });
   const endDrag = (e) => {
     const d = drag.get(e.pointerId); drag.delete(e.pointerId); pinch = null; if (!d || e.type === 'pointercancel') return;
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 8 && performance.now() - d.t < 450) click(e.clientX, e.clientY);
   };
   canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
-  canvas.addEventListener('wheel', (e) => { e.preventDefault(); st.dist = Math.max(5, Math.min(26, st.dist + e.deltaY * 0.01)); }, { passive: false });
+  canvas.addEventListener('wheel', (e) => { e.preventDefault(); st.dist = Math.max(7, Math.min(34, st.dist + e.deltaY * 0.01)); }, { passive: false });
 
   function click(cx, cy) {
     const r = canvas.getBoundingClientRect(); ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); raycaster.setFromCamera(ndc, camera);
@@ -454,12 +451,12 @@ export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {
       if (st.target && moved < sp * 0.25) { st.stuck = (st.stuck || 0) + dt; if (st.stuck > 0.6) { st.target = null; st.autoEnter = null; marker.visible = false; st.stuck = 0; } } else st.stuck = 0;
       const ang = Math.atan2(mx, mz); let da = ang - player.rotation.y; da = Math.atan2(Math.sin(da), Math.cos(da)); player.rotation.y += da * Math.min(1, dt * 12);
     }
-    animatePerson(player, moved, dt);
+    animateWalker(player, moved, dt);
     // visitantes
     for (const n of npcs) {
       const dx = n.tx - n.p.position.x, dz = n.tz - n.p.position.z, d = Math.hypot(dx, dz);
-      if (d < 0.6) { n.wait -= dt; animatePerson(n.p, 0, dt); if (n.wait < 0) { for (let k = 0; k < 8; k++) { const a = rand() * Math.PI * 2, r = 4 + rand() * 40, x = Math.cos(a) * r, z = 6 + Math.sin(a) * r * 0.9; if (Math.abs(x) < 50 && Math.abs(z) < 50 && !hits(x, z, 1)) { n.tx = x; n.tz = z; break; } } n.wait = 2 + rand() * 6; } }
-      else { n.p.position.x += (dx / d) * 1.6 * dt; n.p.position.z += (dz / d) * 1.6 * dt; resolve(n.p.position, 0.5); n.p.rotation.y = Math.atan2(dx, dz); animatePerson(n.p, 1.6, dt); }
+      if (d < 0.6) { n.wait -= dt; animateWalker(n.p, 0, dt); if (n.wait < 0) { for (let k = 0; k < 8; k++) { const a = rand() * Math.PI * 2, r = 4 + rand() * 40, x = Math.cos(a) * r, z = 6 + Math.sin(a) * r * 0.9; if (Math.abs(x) < 50 && Math.abs(z) < 50 && !hits(x, z, 1)) { n.tx = x; n.tz = z; break; } } n.wait = 2 + rand() * 6; } }
+      else { n.p.position.x += (dx / d) * 1.3 * dt; n.p.position.z += (dz / d) * 1.3 * dt; resolve(n.p.position, 0.5); n.p.rotation.y = Math.atan2(dx, dz); animateWalker(n.p, 1.3, dt); }
     }
     for (const t of traffic) { t.a += t.v * dt * 3; t.c.position.set(Math.cos(t.a) * 60, 0, Math.sin(t.a) * 60); t.c.rotation.y = -t.a; }
     clouds.forEach((c, i) => { c.position.x += dt * (1 + i * 0.1); if (c.position.x > 200) c.position.x = -200; });
@@ -471,7 +468,8 @@ export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {
     let frac = 1;
     for (let k = 1; k <= 12; k++) { const t = k / 12, px = player.position.x + (want.x - player.position.x) * t, pz = player.position.z + (want.z - player.position.z) * t; if (hits(px, pz, 0.7)) { frac = Math.max(0.28, (k - 1.5) / 12); break; } }
     want.set(player.position.x + (want.x - player.position.x) * frac, want.y - (1 - frac) * 0.6 * (want.y - 2), player.position.z + (want.z - player.position.z) * frac);
-    camera.position.lerp(want, Math.min(1, dt * 8)); camera.lookAt(player.position.x, 1.5, player.position.z);
+    camera.position.lerp(want, Math.min(1, dt * 8));
+    camera.lookAt(player.position.x - Math.sin(st.yaw) * 3, 1.2, player.position.z - Math.cos(st.yaw) * 3);
     // cercanía a puertas y lugares
     let near = null, bd = 1e9;
     for (const t of targets) { const d = Math.hypot(player.position.x - t.x, player.position.z - t.z); if (d < t.r && d < bd) { near = t; bd = d; } }
@@ -479,7 +477,7 @@ export function createCampus(container, { me = {}, onEnter, onPick, onNear } = {
     mapT += dt; if (mapT > 0.1) { mapT = 0; drawMap(); }
     renderer.render(scene, camera);
   }
-  camera.position.set(Math.sin(st.yaw) * 10, 6.5, 42 + 10);
+  camera.position.set(Math.sin(st.yaw) * 12.5, 12.5, 42 + 12.5);
   raf = requestAnimationFrame(frame);
 
   return {

@@ -17,7 +17,8 @@ export function returnToCampus() {
   if (id && campus) campus.teleport(id);
 }
 
-export async function mountCampus(el, { name = 'Visitante', color, toast = () => {} } = {}) {
+export async function mountCampus(el, { profile = {}, toast = () => {} } = {}) {
+  const name = profile.name || 'Visitante';
   root = el;
   root.innerHTML = `
     <div class="cmp-world" id="cmpWorld"></div>
@@ -37,7 +38,7 @@ export async function mountCampus(el, { name = 'Visitante', color, toast = () =>
   const loading = document.createElement('div'); loading.className = 'cmp-load'; loading.textContent = 'Armando el campus…'; $('#cmpWorld', root).appendChild(loading);
 
   campus = createCampus($('#cmpWorld', root), {
-    me: { color },
+    me: profile,
     onEnter: (t) => enter(t),
     onNear: (t) => {
       const p = $('#cmpPrompt', root); p.hidden = !t;

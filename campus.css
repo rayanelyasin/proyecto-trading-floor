@@ -94,3 +94,20 @@
 #controlSwitch { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 0 2px; }
 #controlSwitch button { flex: 1; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
 #controlSwitch button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* Un mismo juego, tres edificios: el dock y el selector de pisos cambian según el edificio */
+#app[data-building="oficina"] .b-lab, #app[data-building="oficina"] .b-ai { display: none; }
+#app[data-building="lab"] #dock [data-panel="salas"], #app[data-building="lab"] #dock [data-panel="cursos"], #app[data-building="lab"] #dock [data-panel="videoteca"],
+#app[data-building="lab"] #dock [data-panel="conexiones"], #app[data-building="lab"] #dock [data-panel="miembros"], #app[data-building="lab"] .b-ai,
+#app[data-building="ai"] #dock [data-panel="salas"], #app[data-building="ai"] #dock [data-panel="cursos"], #app[data-building="ai"] #dock [data-panel="videoteca"],
+#app[data-building="ai"] #dock [data-panel="conexiones"], #app[data-building="ai"] #dock [data-panel="miembros"], #app[data-building="ai"] .b-lab { display: none; }
+#app[data-building="lab"] .floor-building, #app[data-building="ai"] .floor-building { display: none; }
+.lab-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.lab-tabs .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.lab-foot { margin: 14px 0 0; font-size: 11.5px; color: var(--muted); }
+.lab-main { min-width: 0; }
+.lab-main h2 { margin: 0 0 8px; font-family: "Fraunces", Georgia, serif; font-weight: 500; font-size: 22px; }
+
+/* las etiquetas de los avatares no deben tapar los paneles */
+#world { z-index: 0; }
+#app .drawer { z-index: 14; }

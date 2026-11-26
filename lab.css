@@ -16,7 +16,7 @@
 .lab-ic { position: absolute; right: 12px; top: 10px; color: var(--accent); font-size: 18px; }
 .lab-dots { display: flex; gap: 4px; margin-top: 4px; }
 .lab-dots i { width: 9px; height: 9px; border-radius: 50%; }
-.lab-main { overflow: auto; padding: 18px max(18px, env(safe-area-inset-right)) 28px 18px; min-width: 0; }
+.lab-main { min-width: 0; }
 .lab-main h2 { margin: 0; font-family: "Fraunces", Georgia, serif; font-weight: 500; font-size: 26px; }
 .lab-main h3 { margin: 18px 0 8px; font-size: 14px; color: var(--accent); }
 .lab-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }

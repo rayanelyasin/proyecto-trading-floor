@@ -5,6 +5,9 @@ import { ROOMS, SLIDES, COURSES, RECORDINGS, AGENTS, AGENDA, MEMBERS, NPC_REPLIE
 import { escapeHtml as esc, FLOORS } from './scene.js';
 import { renderLibrary, renderWatchlist, renderProgram, memoryGame } from './floor-activities.js';
 import { loadMiner, strategyName } from './miner.js';
+import { renderLabPanel, startLabFeed, stopLabFeed, feedFor, labBoardData } from './lab.js';
+import { LAB_SEATS, AI_SEATS } from './offices.js';
+import { OFICINA } from './oficina-ai-data.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -49,6 +52,9 @@ const PANELS = {
   analisis: { title: 'Análisis de mercado', render: renderAnalisis, wide: true },
   alertas: { title: 'Indicadores y alertas', render: renderAlertas },
   agentes: { title: 'Piso de agentes', render: renderAgentes },
+  lab: { title: 'Laboratorio Pulso', icon: 'analisis', render: (body, arg) => renderLabPanel(body, arg), wide: true },
+  agente: { title: 'Agente', icon: 'agentes', render: renderAgenteOficina },
+  oficinaai: { title: 'Mi oficina IA', icon: 'agentes', render: renderOficinaAI, wide: true },
   conferencia: { title: 'Conferencia', render: renderConferencia },
   juegos: { title: 'Sala de juegos', render: renderJuegos },
   conexiones: { title: 'Conexiones', render: renderConexiones, owner: true },
@@ -171,7 +177,7 @@ function visit(id) {
 
 function renderFloorGuide(body) {
   const floor = FLOORS.find(({ n }) => n === world.floor);
-  const destinations = world.destinations().filter((zone) => !zone.id.startsWith('kiosk') || allCourses()[zone.arg]);
+  const destinations = world.destinations().filter((zone) => !zone.agent && (!zone.id.startsWith('kiosk') || allCourses()[zone.arg]));
   if (!destinations.length) return;
   body.innerHTML = `
     <section class="floor-explorer">
@@ -735,6 +741,59 @@ function renderAgentes(body) {
   f?.addEventListener('submit', (e) => { e.preventDefault(); runTask(f.agent.value, f.task.value.trim()); f.task.value = ''; });
 }
 
+// ============ agentes de los edificios 2 y 3 ============
+const seatOf = (key) => [...LAB_SEATS, ...AI_SEATS].find((x) => x.key === key);
+function renderAgenteOficina(body, key) {
+  const s = seatOf(key);
+  if (!s) { body.innerHTML = '<p class="muted">Este agente no está disponible.</p>'; return; }
+  if (s.floor === 5) {
+    const talk = feedFor(s.id);
+    body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="dot busy"></span></div><span class="muted">${esc(s.role)}</span>
+      <div class="agent-status">Trabajando en el laboratorio</div><p>${esc(s.focus)}</p></section>
+      <h4 class="section-t">Lo último que dijo</h4><div class="log">${talk.map((m) => `<div class="log-row"><span class="mono muted">${m.t}</span><span>${esc(m.text)}</span></div>`).join('') || '<p class="muted">Todavía no ha hablado.</p>'}</div>
+      <div class="row gap wrap"><button class="btn primary" data-lab="${s.tool}" type="button">Abrir su herramienta</button><button class="btn" data-lab="sala" type="button">Ver la sala</button></div>
+      <p class="hint">Solo simulación: los agentes no operan con dinero real.</p>`;
+    body.querySelectorAll('[data-lab]').forEach((b) => b.addEventListener('click', () => (b.dataset.lab === 'mercado' ? openPanel('analisis') : openPanel('lab', b.dataset.lab))));
+    return;
+  }
+  const jobs = OFICINA.trabajos.filter((j) => j.cadena.includes(s.id));
+  body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="dot busy"></span></div><span class="muted">Departamento: ${esc(s.room)}</span>
+    <div class="agent-status">${esc(s.doing)}</div><p>${esc(s.role)}.</p><p class="muted">Entrega: ${esc(s.delivers)}.</p></section>
+    <h4 class="section-t">Trabajos en los que participa</h4>
+    <div class="chips">${jobs.map((j) => `<button type="button" class="chip" data-job style="border-color:${j.color}">${esc(j.nombre)}</button>`).join('') || '<span class="muted">Ninguno todavía.</span>'}</div>
+    <div class="row gap wrap"><button class="btn primary" data-open type="button">Iniciar un trabajo</button><a class="btn" href="#/ai-full">Oficina original completa</a></div>
+    <p class="hint">En esta vista previa los agentes simulan el flujo. Los resultados reales se generan al conectar Claude.</p>`;
+  body.querySelectorAll('[data-job], [data-open]').forEach((b) => b.addEventListener('click', () => openPanel('oficinaai', 'trabajos')));
+}
+
+let jobRun = 0;
+function runJob(job) {
+  const run = ++jobRun;
+  closePanel();
+  toast(`Trabajo: ${job.nombre}`, 'Los agentes se pasan el encargo (simulación).');
+  job.cadena.forEach((id, i) => setTimeout(() => {
+    if (run !== jobRun) return;
+    const e = OFICINA.empleados.find((x) => x.id === id);
+    world.agentSay(`ai:${id}`, e.haciendo, 3000);
+    if (i === job.cadena.length - 1) setTimeout(() => { if (run === jobRun) toast(job.listo, 'Fin de la simulación. Con Claude conectado, aquí aparecería la entrega.'); }, 3200);
+  }, i * 3300));
+}
+function renderOficinaAI(body, section = 'director') {
+  const tabs = [['director', 'Director'], ['trabajos', 'Trabajos'], ['negocio', 'Mi negocio'], ['entregas', 'Entregas']];
+  const head = `<nav class="lab-tabs">${tabs.map(([k, l]) => `<button type="button" class="chip" data-sec="${k}" aria-pressed="${k === section}">${l}</button>`).join('')}</nav>`;
+  const foot = '<p class="hint">Las funciones completas (Gmail, Calendar, Drive y entregas reales) viven en la oficina original y necesitan Claude conectado. <a href="#/ai-full">Abrir la oficina original completa</a>.</p>';
+  let main = '';
+  if (section === 'director') main = `<section class="card"><h4>Habla con el director</h4><p class="muted">${OFICINA.empleados.length} agentes trabajan para ${esc(OFICINA.dueno)}. Meta: <b>${esc(OFICINA.meta.valor)}</b> · ${esc(OFICINA.meta.detalle)}.</p>
+      <form class="form" id="dirForm"><label>Orden<textarea name="o" rows="3" maxlength="200" placeholder="Ej.: arma mi semana de contenido"></textarea></label><button class="btn primary">Enviar al director</button></form><p class="muted" id="dirOut"></p></section>`;
+  if (section === 'trabajos') main = `<div class="lab-cards">${OFICINA.trabajos.map((j, i) => `<article class="lab-card"><div class="row between"><b>${esc(j.nombre)}</b><i style="width:12px;height:12px;border-radius:50%;background:${j.color}"></i></div><p class="muted">${j.cadena.map((id) => esc(OFICINA.empleados.find((e) => e.id === id).puesto)).join(' → ')}</p><p class="muted">Resultado: ${esc(j.listo)}</p><button class="btn sm primary" data-run="${i}" type="button">Iniciar</button></article>`).join('')}</div>`;
+  if (section === 'negocio') main = '<section class="card"><h4>Mi negocio</h4><p class="muted">Todavía no hay datos de negocio conectados. En la oficina original puedes subir tu Excel o agenda y el agente Panel arma tus números.</p></section>';
+  if (section === 'entregas') main = '<section class="card"><h4>Entregas</h4><p class="muted">Aún no hay entregas. Cuando los agentes terminen un trabajo conectado a Claude, aparecerán aquí para aprobarlas.</p></section>';
+  body.innerHTML = head + main + foot;
+  body.querySelectorAll('[data-sec]').forEach((b) => b.addEventListener('click', () => renderOficinaAI(body, b.dataset.sec)));
+  body.querySelectorAll('[data-run]').forEach((b) => b.addEventListener('click', () => runJob(OFICINA.trabajos[+b.dataset.run])));
+  body.querySelector('#dirForm')?.addEventListener('submit', (e) => { e.preventDefault(); $('#dirOut').textContent = 'El director anotó tu orden. En esta vista previa no puede repartirla: elige un flujo en «Trabajos» para ver a los agentes en acción.'; world.agentSay('ai:director', 'Recibido, voy a repartir el trabajo.', 4000); });
+}
+
 // ============ alertas ============
 const ALERT_TYPES = { price_above: 'El precio sube sobre', price_below: 'El precio baja de', rsi_above: 'RSI (14) sube sobre', rsi_below: 'RSI (14) baja de' };
 const alertText = (a) => `${SYMBOLS[a.symbol].short} · ${ALERT_TYPES[a.type]} ${a.type.startsWith('rsi') ? a.value : fmt(a.symbol, a.value)}${a.type.startsWith('rsi') ? ` · ${TIMEFRAMES[a.tf]}` : ''}`;
@@ -866,8 +925,9 @@ function renderMiembros(body) {
 function paintFloor(number) {
   const floor = FLOORS.find(({ n }) => n === number);
   $('#app').style.setProperty('--level-color', floor.color);
-  $('#floorLevel').textContent = `Piso ${floor.n}`;
-  $('#floorName').textContent = floor.name;
+  $('#app').dataset.building = floor.building || 'oficina';
+  $('#floorLevel').textContent = floor.building ? 'Edificio' : `Piso ${floor.n}`;
+  $('#floorName').textContent = floor.title || floor.name;
   $('#floorDetail').textContent = floor.description;
   for (const button of $$('#floors [data-floor]')) {
     const selected = Number(button.dataset.floor) === number;
@@ -876,8 +936,18 @@ function paintFloor(number) {
     else button.removeAttribute('aria-current');
   }
 }
+// El laboratorio: los agentes hablan con datos reales y su pantalla grande muestra mercado e incubadora
+let boardTimer = null;
+function syncBuilding(number) {
+  clearInterval(boardTimer); boardTimer = null; stopLabFeed();
+  if (number !== 5) return;
+  startLabFeed((id, text) => world.agentSay(`lab:${id}`, text, 6500));
+  const paint = async () => { try { world.setLabBoard(await labBoardData()); } catch { /* sin conexión */ } };
+  paint(); boardTimer = setInterval(paint, 8000);
+}
 export function onFloor(number) {
   paintFloor(number);
+  syncBuilding(number);
   const fade = $('#fade');
   fade.classList.remove('go');
   void fade.offsetWidth;

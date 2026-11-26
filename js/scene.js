@@ -5,6 +5,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildAvatar, randomAvatar, animateAvatar } from './human.js';
 import { walkingPath } from './floor-path.js';
+import { LAB_FLOOR, AI_FLOOR, LAB_ZONES, AI_ZONES, LAB_SEATS, AI_SEATS, LAB_SPAWN, AI_SPAWN, buildLab, buildAIOffice, drawLabBoard } from './offices.js';
 
 const W = 40, D = 30;
 const BX = W / 2 - 0.7, BZ = D / 2 - 0.7;
@@ -16,7 +17,9 @@ export const FLOORS = [
   { n: 2, name: 'Análisis', description: 'Mercado, seguimiento y alertas', color: '#99c0aa' },
   { n: 3, name: 'Conferencias', description: 'Programa, tarima y audiencia', color: '#a7b7d2' },
   { n: 4, name: 'Juegos', description: 'Arcade, reflejos y memoria', color: '#d9a294' },
+  LAB_FLOOR, AI_FLOOR,
 ];
+export const BUILDING_FLOORS = { oficina: [1, 2, 3, 4], lab: [5], ai: [6] };
 const ZONES_BY = {
   1: [
     { id: 'aula', label: 'Aula', detail: 'Clases y sesiones de la comunidad', panel: 'salas', x: -10, z: -8, r: 4.8 },
@@ -41,6 +44,8 @@ const ZONES_BY = {
   ],
 };
 
+ZONES_BY[5] = LAB_ZONES;
+ZONES_BY[6] = AI_ZONES;
 export function createWorld(container, opts) {
   const { me: meInfo, members, agents, minimap } = opts;
 
@@ -61,8 +66,8 @@ export function createWorld(container, opts) {
   const rscene = new THREE.Scene();
   let sink = rscene, bf = 0, fl = 1;
   const scene = { add: (...a) => sink.add(...a) };
-  const FL = {}, IA = { 1: [], 2: [], 3: [], 4: [] };
-  for (const n of [1, 2, 3, 4]) { FL[n] = new THREE.Group(); FL[n].visible = n === 1; rscene.add(FL[n]); }
+  const FL = {}, IA = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  for (const n of [1, 2, 3, 4, 5, 6]) { FL[n] = new THREE.Group(); FL[n].visible = n === 1; rscene.add(FL[n]); }
   const useFloor = (n) => { sink = n ? FL[n] : rscene; bf = n; };
   rscene.background = new THREE.Color(0x141312);
   rscene.fog = new THREE.Fog(0x141312, 40, 85);
@@ -376,7 +381,7 @@ export function createWorld(container, opts) {
   [[0.36, 0x151515], [0.3, 0xf2efe9], [0.2, 0x151515], [0.1, 0xc0392b]].forEach(([r, c], i) => { const d = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.03, 32), new THREE.MeshStandardMaterial({ color: c, roughness: 0.8 })); d.rotation.z = Math.PI / 2; d.position.set(-W / 2 + 0.06 + i * 0.004, 2.3, 8); scene.add(d); });
 
   // ================= DECORACIÓN: piezas reutilizables =================
-  const EX_OB = { 1: [], 2: [], 3: [], 4: [] }, EX_HS = { 1: [], 2: [], 3: [], 4: [] };
+  const EX_OB = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }, EX_HS = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
   const ob = (f, x, z, w, d) => EX_OB[f].push({ x1: x - w / 2, x2: x + w / 2, z1: z - d / 2, z2: z + d / 2 });
   const obC = (f, x, z, r) => EX_OB[f].push({ cx: x, cz: z, r });
   const spot = (f, ...p) => p.forEach(([x, z]) => EX_HS[f].push({ x, z }));
@@ -596,6 +601,11 @@ export function createWorld(container, opts) {
   { const gr = new THREE.Mesh(new THREE.PlaneGeometry(6, 5), new THREE.MeshStandardMaterial({ map: tex(rugCanvas()), roughness: 1 })); gr.rotation.x = -Math.PI / 2; gr.position.set(14.8, 0.012, 4); gr.receiveShadow = true; scene.add(gr); }
   spot(4, [14.8, 4], [2, 6.5], [-8, 8]);
 
+  // ---------- edificios 2 y 3 del campus: laboratorio y Mi oficina IA ----------
+  const bag = { M, box, cyl, desk, officeChair, monitor, makeScreen, workstation, plant, sofa, laptop, rack, glassWall, plaque, tag, ob, spot, warm, dark, paintMini, scene };
+  useFloor(5); const lab = buildLab(bag);
+  useFloor(6); buildAIOffice(bag);
+
   for (const floorInfo of FLOORS) {
     useFloor(floorInfo.n);
     for (const zone of ZONES_BY[floorInfo.n]) {
@@ -659,8 +669,9 @@ export function createWorld(container, opts) {
     3: [],
     4: [{ x: -12, z: -12.3 }, { x: -9.6, z: -12.3 }, { x: -7.2, z: -12.3 }, { x: -5.8, z: -12 }, { x: -8, z: 0.3 }, { x: -6, z: 3.7 }, { x: -10, z: 3.7 }, { x: -5.6, z: 2 }, { x: 4.4, z: 4.8 }, { x: 7.6, z: 4.8 }, { x: 4.4, z: 1.2 }, { x: 7.6, z: 1.2 }, { x: 12.4, z: -6 }, { x: 14, z: -7.8 }, { x: 15, z: 3 }, { x: 2, z: 8 }, { x: 12, z: 10 }],
   };
-  for (const k of [1, 2, 3, 4]) { OB[k].push(...EX_OB[k]); HS[k].push(...EX_HS[k]); }
-  const SPAWN = { 1: { x: 2, z: 9.5 }, 2: { x: 2, z: 9.5 }, 3: { x: 0, z: 5.5 }, 4: { x: 2, z: 9 } };
+  OB[5] = []; OB[6] = []; HS[5] = []; HS[6] = [];
+  for (const k of [1, 2, 3, 4, 5, 6]) { OB[k].push(...EX_OB[k]); HS[k].push(...EX_HS[k]); }
+  const SPAWN = { 1: { x: 2, z: 9.5 }, 2: { x: 2, z: 9.5 }, 3: { x: 0, z: 5.5 }, 4: { x: 2, z: 9 }, 5: LAB_SPAWN, 6: AI_SPAWN };
   const groundY = (f, x, z) => (f === 3 && z < -10.5 && Math.abs(x) < 9.2 ? 0.5 : 0);
   const blocked = (x, z, pad = 0.32, f = fl) => {
     if (x < -BX || x > BX || z < -BZ || z > BZ) return true;
@@ -718,6 +729,28 @@ export function createWorld(container, opts) {
   });
   const host = npcs.find((n) => n.name === 'Camila');
   if (host) { host.group.position.set(-12.6, 0.32, -13.2); host.group.rotation.y = 0.25; host.static = true; }
+
+  // Agentes de IA del laboratorio y de Mi oficina IA: avatares de Pulso sentados en sus escritorios,
+  // más algunos paseantes que recorren la oficina.
+  const agentAvs = new Map();
+  for (const s of [...LAB_SEATS, ...AI_SEATS]) {
+    const a = makeAvatar({ id: s.key, name: s.name, kind: 'npc', avatar: randomAvatar(s.key) });
+    a.member = { name: s.name, role: s.role, floor: s.floor };
+    a.floor = s.floor; a.static = true; a.seated = true; a.agentKey = s.key; a.lines = s.lines;
+    a.group.position.set(s.x, 0, s.z + 0.02); a.group.rotation.y = s.rot;
+    a.group.visible = false; a.label.visible = false;
+    npcs.push(a); agentAvs.set(s.key, a);
+  }
+  const WALKERS = [[5, 'Ayudante', 'Llevo los resultados al comité'], [5, 'Pasante', 'Voy a revisar los servidores'], [6, 'Asistente', 'Reviso cómo van los trabajos'], [6, 'Mensajera', 'Llevo una entrega al director']];
+  for (const [f, name, line] of WALKERS) {
+    const a = makeAvatar({ id: 'walk-' + name + f, name, kind: 'npc', avatar: randomAvatar(name + f) });
+    a.member = { name, role: 'Asistente', floor: f };
+    a.floor = f; a.lines = [line]; a.speed = 1.25;
+    const p = HS[f][(Math.random() * HS[f].length) | 0] || { x: 0, z: 0 };
+    a.group.position.set(p.x, 0, p.z); a.idleUntil = performance.now() + Math.random() * 3000;
+    a.group.visible = false; a.label.visible = false;
+    npcs.push(a);
+  }
 
   function randomPoint() { return { x: (Math.random() * 2 - 1) * (BX - 1), z: (Math.random() * 2 - 1) * (BZ - 1) }; }
 
@@ -891,10 +924,10 @@ export function createWorld(container, opts) {
   function npcChatter(now) {
     if (now < nextChat) return;
     nextChat = now + 6000 + Math.random() * 10000;
-    const pool = npcs.filter((n) => !n.static && n.floor === fl);
+    const pool = npcs.filter((n) => (!n.static || n.lines) && n.floor === fl);
     const n = pool[(Math.random() * pool.length) | 0];
     if (!n) return;
-    const line = opts.npcLines[(Math.random() * opts.npcLines.length) | 0];
+    const line = n.lines ? n.lines[(Math.random() * n.lines.length) | 0] : opts.npcLines[(Math.random() * opts.npcLines.length) | 0];
     say(n, line);
     opts.onChat?.(n, line, dist(n, me));
   }
@@ -1066,7 +1099,7 @@ export function createWorld(container, opts) {
     mctx.fillStyle = 'rgba(255,255,255,0.07)';
     for (const o of OB[fl]) { if (o.r) { mctx.beginPath(); mctx.arc(sx(o.cx), sz(o.cz), (o.r / W) * w, 0, Math.PI * 2); mctx.fill(); } else mctx.fillRect(sx(o.x1), sz(o.z1), sx(o.x2) - sx(o.x1), sz(o.z2) - sz(o.z1)); }
     for (const z of ZONES_BY[fl]) {
-      if (z.id.startsWith('kiosk')) continue;
+      if (z.id.startsWith('kiosk') || z.agent) continue;
       mctx.strokeStyle = currentZone?.id === z.id ? GOLD : 'rgba(217,191,140,0.25)'; mctx.lineWidth = 1.2;
       mctx.beginPath(); mctx.arc(sx(z.x), sz(z.z), (z.r / W) * w, 0, Math.PI * 2); mctx.stroke();
       mctx.fillStyle = GOLD;
@@ -1141,11 +1174,11 @@ export function createWorld(container, opts) {
   const marketFloor = M.floor.clone(), gamesFloor = M.floor.clone();
   marketFloor.color.set('#aaa5a0');
   gamesFloor.color.set('#b8aaa1');
-  const floorMats = { 1: M.floor, 2: marketFloor, 3: M.carpet, 4: gamesFloor };
+  const floorMats = { 1: M.floor, 2: marketFloor, 3: M.carpet, 4: gamesFloor, 5: marketFloor, 6: M.floor };
   function setFloor(n) {
     if (n === fl || !FL[n]) return;
     fl = n; me.floor = n;
-    for (const k of [1, 2, 3, 4]) FL[k].visible = k === n;
+    for (const k of [1, 2, 3, 4, 5, 6]) FL[k].visible = k === n;
     floor.material = floorMats[n];
     for (const a of npcs) { const on = a.floor === n; a.group.visible = on; a.label.visible = on; }
     const sp = SPAWN[n];
@@ -1173,7 +1206,7 @@ export function createWorld(container, opts) {
 
   // ---------- API ----------
   return {
-    me, npcs, say, FLOORS, VIEWS, setFloor, setView, floorNpcs, applause, get floor() { return fl; }, get view() { return view; },
+    me, npcs, say, FLOORS, VIEWS, setFloor, agentAvatar: (key) => agentAvs.get(key), agentSay(key, text, ms) { const a = agentAvs.get(key); if (a) say(a, text, ms); }, setLabBoard(data) { drawLabBoard(lab.wall, data); }, setView, floorNpcs, applause, get floor() { return fl; }, get view() { return view; },
     get currentZone() { return currentZone; },
     setPaused(value) { paused = value; keys.clear(); },
     destinations: () => ZONES_BY[fl],

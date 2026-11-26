@@ -33,53 +33,43 @@ const AGENTS = [
 ];
 const agent = (id) => AGENTS.find((a) => a.id === id);
 
-let root = null, current = 'sala', feed = [], timer = null, running = null, lastResult = null, incubated = [];
+let root = null, current = 'sala', feed = [], timer = null, running = null, lastResult = null, incubated = [], onSay = null;
 
-export function mountLab(el, { onBack }) {
-  root = el;
-  root.innerHTML = `
-    <header class="lab-top">
-      <button class="btn sm" id="labBack" type="button">← Campus</button>
-      <div class="lab-title"><b>Laboratorio Pulso</b><small>Estrategias minadas por agentes · solo simulación</small></div>
-      <span class="lab-src" id="labSrc"></span>
-    </header>
-    <div class="lab-body">
-      <nav class="lab-plan" id="labPlan" aria-label="Plano del laboratorio"></nav>
-      <section class="lab-main" id="labMain" aria-live="polite"></section>
-    </div>
+// Panel del laboratorio: se abre desde los quioscos y los agentes de la oficina 3D.
+export function renderLabPanel(body, id = 'sala') {
+  root = body; current = ROOMS.some((r) => r.id === id) ? id : 'sala';
+  body.innerHTML = `<nav class="lab-tabs" id="labTabs" aria-label="Salas del laboratorio">${ROOMS.map((r) => `<button type="button" class="chip" data-room="${r.id}" aria-pressed="false">${r.name}</button>`).join('')}</nav><section class="lab-main" id="labMain" aria-live="polite"></section>
     <p class="lab-foot">Simulación educativa. Ganar en el pasado no garantiza ganar en el futuro y nada de esto es asesoría financiera. No se ejecutan operaciones.</p>`;
-  $('#labBack', root).addEventListener('click', onBack);
-  const paintSrc = () => { $('#labSrc', root).textContent = market.status === 'en vivo' ? '● Datos en vivo' : market.status === 'simulado' ? '○ Datos simulados' : '… Conectando'; };
-  paintSrc(); market.on((t) => { if (t === 'status') paintSrc(); });
-  paintPlan();
+  body.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => show(b.dataset.room)));
   show(current);
-  startFeed();
+  return () => { if (root === body) { running?.abort(); root = null; } };
 }
-export function unmountLab() { clearInterval(timer); timer = null; running?.abort(); }
-export function showLabRoom(id) { if (root) show(id); }
-
-function paintPlan() {
-  $('#labPlan', root).innerHTML = ROOMS.map((r) => `
-    <button class="lab-room" data-room="${r.id}" type="button" aria-pressed="${r.id === current}">
-      <span class="lab-ic" aria-hidden="true">${r.icon}</span><b>${r.name}</b><small>${r.blurb}</small>
-      <span class="lab-dots">${AGENTS.filter((a) => roomOf(a.id) === r.id).map((a) => `<i title="${a.name}" style="background:${a.color}"></i>`).join('')}</span>
-    </button>`).join('');
-  root.querySelectorAll('[data-room]').forEach((b) => b.addEventListener('click', () => show(b.dataset.room)));
-}
-const roomOf = (id) => ({ dir: 'comite', rie: 'riesgos', mac: 'mercado', ana: 'mercado', min: 'mineria', qua: 'incubadora' }[id]);
-
 function show(id) {
   current = id;
   root.querySelectorAll('[data-room]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.room === id)));
   const main = $('#labMain', root);
   ({ sala: viewSala, mineria: viewMineria, incubadora: viewIncubadora, ranking: viewRanking, comite: viewComite, riesgos: viewRiesgos, mercado: viewMercado, conexiones: viewConexiones }[id])(main);
 }
+export const labAgents = () => AGENTS;
+export const feedFor = (id) => feed.filter((m) => m.id === id).slice(0, 6);
+
+// Datos para la pantalla grande del laboratorio (precios reales y estado de la incubadora)
+let boardCache = { at: 0, strategies: [] };
+export async function labBoardData() {
+  if (Date.now() - boardCache.at > 60000) {
+    boardCache.at = Date.now();
+    const list = await refreshIncubator(loadMiner().strategies).catch(() => []);
+    boardCache.strategies = list.map((s) => ({ name: strategyName(s), status: (STATUS[s.status] || STATUS['sin datos'])[0], inPosition: Boolean(s.signal?.inPosition) }));
+  }
+  return { live: market.status === 'en vivo', prices: Object.entries(SYMBOLS).map(([k, v]) => ({ name: v.short, price: fmt(k, market.prices[k]), change: market.change[k] ?? 0 })), strategies: boardCache.strategies };
+}
 
 // ---------- sala: agentes conversando ----------
 function say(id, text) {
   feed.unshift({ t: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), id, text });
   feed.length = Math.min(feed.length, 60);
-  if (current === 'sala') paintFeed();
+  onSay?.(id, text);
+  if (root && current === 'sala') paintFeed();
 }
 function paintFeed() {
   const el = $('#labFeed', root); if (!el) return;
@@ -105,12 +95,13 @@ async function tick() {
     }
   } catch { /* sin conexión: el siguiente intento lo cubre */ }
 }
-function startFeed() {
-  clearInterval(timer);
+export function startLabFeed(cb) {
+  onSay = cb; clearInterval(timer);
   say('dir', 'Bienvenidos al laboratorio. Hoy minamos, incubamos y solo lo robusto pasa al examen.');
-  timer = setInterval(tick, 6500);
-  setTimeout(tick, 1200);
+  timer = setInterval(tick, 7000);
+  setTimeout(tick, 1500);
 }
+export function stopLabFeed() { clearInterval(timer); timer = null; onSay = null; }
 function viewSala(main) {
   main.innerHTML = `<div class="lab-head"><h2>Sala de traders</h2><button class="btn sm primary" id="labCom" type="button">Convocar comité</button></div>
     <div class="lab-agents">${AGENTS.map((a) => `<span class="lab-agent" style="--c:${a.color}"><i></i><b>${a.name}</b><small>${a.role}</small></span>`).join('')}</div>
