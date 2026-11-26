@@ -10,6 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="creator.css">
+  <link rel="stylesheet" href="floor.css">
+  <link rel="stylesheet" href="campus.css">
+  <link rel="stylesheet" href="lab.css">
   <script type="importmap">
     { "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -25,63 +29,59 @@
   <header class="nav">
     <a class="logo" href="#/"><span class="logo-mark"></span>Pulso</a>
     <nav class="nav-links"><a href="#que">Qué incluye</a><a href="#como">Cómo funciona</a></nav>
-    <a class="btn primary" href="#/piso">Entrar al piso</a>
+    <a class="btn primary" href="#/campus">Entrar al campus</a>
   </header>
 
   <section class="hero">
     <div class="hero-copy">
-      <span class="eyebrow"><span class="pulse-dot"></span>Precios en vivo ahora mismo</span>
-      <h1>Tu comunidad de trading, <em>en un mismo piso.</em></h1>
-      <p class="lead">Un espacio en 3D donde tus miembros entran con su personaje, conversan con quien tienen cerca, toman la clase en el aula y miran el mercado en un muro con datos reales, mientras los agentes marcan niveles y escenarios.</p>
+      <h1>Tu comunidad de trading <em>en 3D.</em></h1>
+      <p class="lead">Crea tu personaje y recorre cuatro pisos para estudiar, seguir el mercado, presentar ideas y jugar con tu comunidad.</p>
       <div class="row gap wrap">
-        <a class="btn primary lg" href="#/piso">Entrar al piso →</a>
-        <a class="btn lg" href="#que">Ver qué incluye</a>
+        <a class="btn primary lg" href="#/campus">Entrar al campus <span aria-hidden="true">→</span></a>
+        <a class="btn lg" href="#/piso">Ir directo a la oficina</a>
       </div>
-      <div id="heroTicker" class="hero-ticker"><span class="muted">Conectando con el mercado…</span></div>
+      <div class="hero-market">
+        <div class="hero-market-head"><b>Mercado</b><span id="heroMarketStatus">Conectando…</span></div>
+        <div id="heroTicker" class="hero-ticker"><span class="muted">Cargando precios…</span></div>
+      </div>
     </div>
-    <div class="hero-visual" aria-hidden="true">
-      <div class="iso">
-        <div class="iso-floor">
-          <div class="iso-wall"><svg viewBox="0 0 300 120" preserveAspectRatio="none"><polyline class="spark" points="0,90 20,80 40,86 60,60 80,66 100,40 120,52 140,30 160,44 180,24 200,36 220,18 240,30 260,12 280,22 300,8"/></svg></div>
-          <span class="iso-av" style="--c:#d9bf8c;--x:48%;--y:62%"></span>
-          <span class="iso-av" style="--c:#4cc9f0;--x:30%;--y:40%"></span>
-          <span class="iso-av" style="--c:#ff7a59;--x:66%;--y:36%"></span>
-          <span class="iso-av" style="--c:#f72585;--x:72%;--y:70%"></span>
-          <span class="iso-av" style="--c:#06d6a0;--x:22%;--y:72%"></span>
-          <span class="iso-ring" style="--x:30%;--y:40%"></span>
+    <div class="hero-visual">
+      <figure class="hero-world">
+        <img src="assets/landing/piso-analisis.jpg" alt="Piso de análisis de Pulso, con pantalla de mercado, terminales y centro de cómputo" width="1050" height="670" fetchpriority="high">
+        <figcaption><span data-icon="analisis"></span> Piso de análisis</figcaption>
+      </figure>
+      <div class="hero-studio">
+        <div class="hero-portraits" aria-hidden="true">
+          <img src="assets/creator/look-urbano.webp" alt="" width="238" height="272">
+          <img src="assets/creator/look-atelier.webp" alt="" width="238" height="272">
         </div>
+        <div><b>Estudio de personajes</b><small>Cuerpo, rostro, peinado y ropa</small></div>
       </div>
-      <div class="float-card fc1"><b>R1</b><span class="mono">calculado en vivo</span></div>
-      <div class="float-card fc2"><span class="pill live">● En vivo</span><span>Apertura de Londres</span></div>
-      <div class="float-card fc3"><span class="mono up">RSI 64</span><span>alerta activa</span></div>
     </div>
   </section>
 
   <section id="que" class="features">
-    <h2>Todo lo de tu comunidad, sin salir del piso</h2>
+    <h2>Recorre los cuatro pisos</h2>
     <div class="bento">
-      <article class="tile big"><span class="tile-ic" data-icon="analisis"></span><h3>Análisis con datos reales</h3><p>Velas en vivo, medias de 50 y 200, RSI, soportes y resistencias calculados automáticamente, escenario alcista y bajista y una calculadora de riesgo que te da el tamaño exacto de la posición.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="salas"></span><h3>Aula y salas</h3><p>Clase en vivo en la pantalla grande del aula, directorio de salas y recordatorios. El dueño puede compartir su pantalla.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="chat"></span><h3>Chat de proximidad</h3><p>Hablas con quien tienes cerca, como en un piso de verdad.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="alertas"></span><h3>Alertas que se cumplen</h3><p>De precio y de RSI, revisadas con datos en vivo. Te avisan en el momento.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="agentes"></span><h3>Agentes a la vista</h3><p>Cuatro agentes trabajan en el piso. El dueño les da tareas y todos ven el resultado.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="cursos"></span><h3>Cursos con avance</h3><p>Te acercas a un puesto y el curso se abre ahí mismo, guardando tu progreso.</p></article>
-      <article class="tile"><span class="tile-ic" data-icon="conexiones"></span><h3>Conexiones de solo lectura</h3><p>Webhooks de TradingView, exchange y proveedor de precios. Nada puede operar.</p></article>
+      <article class="tile"><span class="tile-ic" data-icon="cursos"></span><h3>Clases</h3><p>Aprende a tu ritmo, consulta el glosario y guarda tus apuntes en la biblioteca.</p></article>
+      <article class="tile"><span class="tile-ic" data-icon="analisis"></span><h3>Análisis</h3><p>Sigue tus activos, revisa gráficos y configura alertas de precio o RSI.</p></article>
+      <article class="tile"><span class="tile-ic" data-icon="conferencia"></span><h3>Conferencias</h3><p>Consulta el programa del auditorio, sube a la tarima y comparte tu pantalla.</p></article>
+      <article class="tile"><span class="tile-ic" data-icon="juegos"></span><h3>Juegos</h3><p>Busca parejas de memoria, pon a prueba tus reflejos o adivina la próxima vela.</p></article>
     </div>
   </section>
 
   <section id="como" class="steps">
-    <h2>Cómo funciona</h2>
+    <h2>Cómo empezar</h2>
     <ol>
-      <li><b>Eliges tu personaje</b><span>Nombre y color. Entras como dueño o como miembro.</span></li>
-      <li><b>Caminas por el piso</b><span>WASD, flechas o un toque en el suelo. El minimapa te lleva a cualquier zona.</span></li>
-      <li><b>Te acercas y abres</b><span>Aula, muro de mercado, puestos de cursos, videoteca, agentes y torre de alertas.</span></li>
+      <li><b>Diseña tu personaje</b><span>Parte de un estilo o ajusta cada rasgo en el estudio 3D.</span></li>
+      <li><b>Elige un piso</b><span>Cambia de nivel y abre el explorador para encontrar las actividades.</span></li>
+      <li><b>Camina hasta la actividad</b><span>Usa WASD, toca el suelo o elige un destino en el explorador.</span></li>
     </ol>
-    <a class="btn primary lg" href="#/piso">Probarlo ahora →</a>
+    <a class="btn primary lg" href="#/piso">Probar Pulso <span aria-hidden="true">→</span></a>
   </section>
 
   <footer class="foot">
-    <span>Pulso · demo funcional. Los miembros, salas y cursos son de ejemplo; los precios e indicadores son reales.</span>
+    <span>Pulso · demo local. Las cuentas y el progreso se guardan en este navegador. El mercado indica cuando usa datos simulados.</span>
     <span>El análisis es información de apoyo, no asesoría financiera. La plataforma no ejecuta operaciones.</span>
   </footer>
 </main>
@@ -92,14 +92,15 @@
 
   <header class="topbar">
     <a class="logo" href="#/"><span class="logo-mark"></span><span class="hide-sm">Pulso</span></a>
-    <div class="ticker-wrap"><span id="liveStatus" class="status"></span><div id="ticker" class="ticker"></div></div>
+    <a class="btn sm to-campus" href="#/campus" aria-label="Volver al campus">← Campus</a>
+    <div class="ticker-wrap"><span id="liveStatus" class="status"></span><span id="marketSource" class="market-source" role="status">Conectando</span><div id="ticker" class="ticker"></div></div>
     <div class="seg" id="roleSwitch"><button data-role="dueno">Dueño</button><button data-role="miembro">Miembro</button></div>
     <button class="me-chip" id="meChip" title="Editar personaje"></button>
     <button class="me-chip" id="logoutBtn" title="Cerrar sesión">Salir</button>
   </header>
 
-  <nav id="dock" class="dock">
-    <button data-panel="piso" data-icon="piso" class="on"><span>Piso</span></button>
+  <nav id="dock" class="dock" aria-label="Herramientas del piso">
+    <button data-panel="piso" data-icon="piso"><span>Explorar</span></button>
     <button data-panel="salas" data-icon="salas"><span>Salas</span></button>
     <button data-panel="cursos" data-icon="cursos"><span>Cursos</span></button>
     <button data-panel="videoteca" data-icon="videoteca"><span>Videos</span></button>
@@ -110,38 +111,67 @@
     <button data-panel="miembros" data-icon="miembros" class="owner-only"><span>Miembros</span></button>
   </nav>
 
-  <aside class="hudr">
-    <nav id="floors" class="seg vert" aria-label="Pisos">
-      <button data-floor="1" class="on"><b>1</b><span class="fname">Clases</span></button>
-      <button data-floor="2"><b>2</b><span class="fname">Análisis</span></button>
-      <button data-floor="3"><b>3</b><span class="fname">Conferencias</span></button>
-      <button data-floor="4"><b>4</b><span class="fname">Juegos</span></button>
-    </nav>
-    <nav id="viewSwitch" class="seg vert" aria-label="Vista de cámara">
-      <button data-view="primera" data-icon="eye"><span class="fname">1ª persona</span></button>
-      <button data-view="tercera" data-icon="person" class="on"><span class="fname">3ª persona</span></button>
-      <button data-view="maqueta" data-icon="cube"><span class="fname">Maqueta</span></button>
-    </nav>
+  <section class="floor-location" aria-labelledby="floorName">
+    <p id="floorLevel">Piso 1</p>
+    <h1 id="floorName">Clases</h1>
+    <p id="floorDetail">Aula, biblioteca y cursos</p>
+    <button class="btn sm" id="exploreFloor" type="button" aria-controls="drawer" aria-expanded="false" data-icon="piso">Explorar piso</button>
+  </section>
+
+  <aside class="hudr" aria-label="Edificio y cámara">
+    <section class="floor-building">
+      <h2>Edificio</h2>
+      <nav id="floors" aria-label="Cambiar de piso">
+        <button data-floor="1" class="on" aria-label="Piso 1, Clases" aria-current="location"><b>1</b><span class="fname">Clases</span></button>
+        <button data-floor="2" aria-label="Piso 2, Análisis"><b>2</b><span class="fname">Análisis</span></button>
+        <button data-floor="3" aria-label="Piso 3, Conferencias"><b>3</b><span class="fname">Conferencias</span></button>
+        <button data-floor="4" aria-label="Piso 4, Juegos"><b>4</b><span class="fname">Juegos</span></button>
+      </nav>
+    </section>
+    <details id="cameraTools" class="floor-camera" open>
+      <summary><span>Cámara</span><small id="cameraName">3ª persona</small></summary>
+      <nav id="viewSwitch" aria-label="Vista de cámara">
+        <button data-view="primera" data-icon="eye" aria-label="Primera persona" aria-pressed="false"><span>1ª persona</span></button>
+        <button data-view="tercera" data-icon="person" class="on" aria-label="Tercera persona" aria-pressed="true"><span>3ª persona</span></button>
+        <button data-view="maqueta" data-icon="cube" aria-label="Maqueta" aria-pressed="false"><span>Maqueta</span></button>
+      </nav>
+    </details>
+    <details id="controlTools" class="floor-camera" open>
+      <summary><span>Controles</span><small id="controlName">Teclado</small></summary>
+      <nav id="controlSwitch" aria-label="Modo de control"></nav>
+    </details>
   </aside>
   <div id="fade" class="fade"></div>
 
   <button id="zonePrompt" class="zone-prompt" hidden></button>
 
   <aside id="chat" class="chat">
-    <header><button id="chatToggle" class="chat-h"><span data-icon="chat"></span><b>Cerca de ti</b></button><div id="nearby" class="nearby"></div></header>
-    <div id="chatList" class="chat-list"></div>
-    <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="140" placeholder="Escribe a quien está cerca…" autocomplete="off"><button aria-label="Enviar" data-icon="send"></button></form>
+    <header><button id="chatToggle" class="chat-h" aria-controls="chatList chatForm" aria-expanded="true"><span data-icon="chat"></span><b>Chat cercano</b></button><div id="nearby" class="nearby"></div></header>
+    <div id="chatList" class="chat-list" role="log" aria-label="Mensajes cercanos"></div>
+    <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="140" aria-label="Mensaje de chat" placeholder="Escribe a quien está cerca…" autocomplete="off"><button aria-label="Enviar" data-icon="send"></button></form>
   </aside>
 
-  <div class="mini-wrap"><canvas id="minimap" width="230" height="170"></canvas><span class="help">WASD / clic para moverte · E para abrir · rueda para zoom</span><button id="resetDemo" class="link-sm">Reiniciar demo</button></div>
+  <section class="mini-wrap" aria-label="Mapa y controles">
+    <button class="btn sm" type="button" id="mapToggle" aria-controls="floorMap" aria-expanded="true" data-icon="cube">Mapa</button>
+    <div id="floorMap">
+      <canvas id="minimap" width="230" height="170" aria-label="Mapa del piso. Pulsa un punto para caminar. Usa Explorar para elegir un destino con el teclado."></canvas>
+      <p class="map-help">Pulsa el mapa o usa WASD para caminar.</p>
+      <button id="resetDemo" class="link-sm" type="button">Reiniciar demo</button>
+    </div>
+  </section>
 
-  <aside id="drawer" class="drawer" hidden>
-    <header class="drawer-h"><h2 id="drawerTitle"></h2><button id="drawerClose" class="btn ghost icon-only" aria-label="Cerrar" data-icon="x"></button></header>
+  <aside id="drawer" class="drawer" aria-labelledby="drawerTitle" hidden>
+    <header class="drawer-h"><h2 id="drawerTitle" tabindex="-1"></h2><button id="drawerClose" class="btn ghost icon-only" aria-label="Cerrar" data-icon="x"></button></header>
     <div id="drawerBody" class="drawer-b"></div>
   </aside>
 
   <div id="loader" class="loader" hidden><div class="spin"></div><span>Armando el piso…</span></div>
 </section>
+
+<!-- ================= CAMPUS Y EDIFICIOS ================= -->
+<section id="campus" hidden aria-label="Campus Pulso"></section>
+<section id="lab" hidden aria-label="Laboratorio Pulso"></section>
+<section id="ai" hidden aria-label="Mi oficina IA"><button class="ai-back" id="aiBack" type="button">← Volver al campus</button></section>
 
 <div id="toasts" class="toasts"></div>
 

@@ -2,6 +2,7 @@
 // animaciones de captura de movimiento (caminar, correr, sentarse, hablar) y ajustes en tiempo real.
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { buildEditableAvatar } from './editable-avatar.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 export const MODELS = {
@@ -9,6 +10,7 @@ export const MODELS = {
   m: ['Male_Adult_01', 'Male_Adult_02', 'Male_Adult_03', 'Male_Adult_04', 'Male_Adult_06', 'Male_Adult_08', 'Male_Adult_09', 'Male_Adult_10', 'Male_Adult_12', 'Male_Adult_14', 'Male_Adult_17', 'Male_Adult_18'],
 };
 const ALL = [...MODELS.f, ...MODELS.m];
+const OPAQUE_MODELS = new Set(['Male_Adult_12', 'Male_Adult_14', 'Male_Adult_17', 'Male_Adult_18']);
 
 export const OPTIONS = {
   gender: [['f', 'Mujer'], ['m', 'Hombre']],
@@ -18,8 +20,8 @@ export const OPTIONS = {
 };
 export const DEFAULT_AVATAR = { gender: 'f', model: 'Female_Adult_01', height: 1, build: 1, skin: '#ffffff', hairTint: '#ffffff', accessory: 'none', topColor: '#d9bf8c' };
 
-function normalize(c0) {
-  const c = { ...DEFAULT_AVATAR, ...c0 };
+export function normalizeLegacyAvatar(c0) {
+  const c = { ...DEFAULT_AVATAR, ...c0, kind: 'legacy' };
   if (c.model?.startsWith('Male')) c.gender = 'm'; else if (c.model?.startsWith('Female')) c.gender = 'f';
   if (c.gender !== 'm') c.gender = 'f';
   if (!MODELS[c.gender].includes(c.model)) c.model = MODELS[c.gender][0];
@@ -55,16 +57,21 @@ export function preloadAvatars() {
     }
     for (const n of ALL) {
       jobs.push(loadFbx(`assets/rb/avatars/${n}.fbx`).then((o) => { DATA.fbx[n] = o; const b = new THREE.Box3().setFromObject(o); DATA.h[n] = b.max.y * 0.01; }));
-      for (const [k, ext] of [['body', 'jpg'], ['head', 'jpg'], ['opacity', 'png']]) jobs.push(loadTex(`assets/rb/avatars/${n}_${k}.${ext}`).then((t) => { DATA.tex[`${n}_${k}`] = t; }).catch(() => {}));
+      const textures = [['body', 'jpg'], ['head', 'jpg']];
+      if (!OPAQUE_MODELS.has(n)) textures.push(['opacity', 'png']);
+      for (const [k, ext] of textures) {
+        jobs.push(loadTex(`assets/rb/avatars/${n}_${k}.${ext}`).then((t) => { DATA.tex[`${n}_${k}`] = t; }).catch(() => {}));
+      }
     }
     await Promise.all(jobs);
-  })();
+  })().catch((error) => { DATA.ready = null; throw error; });
   return DATA.ready;
 }
 
 // ---------- construir una persona ----------
 export function buildAvatar(cfg0) {
-  const c = normalize(cfg0);
+  if (cfg0?.kind === 'editable') return buildEditableAvatar(cfg0);
+  const c = normalizeLegacyAvatar(cfg0);
   const root = SkeletonUtils.clone(DATA.fbx[c.model]);
   let head, mesh;
   root.traverse((o) => { if (o.isSkinnedMesh) mesh = o; if (o.isBone && o.name === 'Bip01_Head') head = o; });
@@ -117,5 +124,6 @@ export function animateAvatar(av, walking, speed, dt) {
   for (const [k, a] of Object.entries(m.actions)) { const w = a.getEffectiveWeight(), t = k === want ? 1 : 0; a.setEffectiveWeight(w + (t - w) * Math.min(1, dt * 8)); }
   if (m.actions.walk) m.actions.walk.timeScale = THREE.MathUtils.clamp(speed / 1.4, 0.7, 1.5);
   if (m.actions.run) m.actions.run.timeScale = THREE.MathUtils.clamp(speed / 3.6, 0.8, 1.4);
-  m.mixer.update(dt);
+  if (m.updateAnimation) m.updateAnimation(dt);
+  else m.mixer.update(dt);
 }

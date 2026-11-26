@@ -1,8 +1,10 @@
 // Interfaz sobre el piso: barra superior, dock, paneles, chat de proximidad, alertas y agentes.
 import { store, save, reset } from './store.js';
-import { market, SYMBOLS, TIMEFRAMES, getCandles, analyze, fmt, fmtNum } from './market.js';
+import { market, SYMBOLS, TIMEFRAMES, getCandles, candlesAreLive, analyze, fmt, fmtNum } from './market.js';
 import { ROOMS, SLIDES, COURSES, RECORDINGS, AGENTS, AGENDA, MEMBERS, NPC_REPLIES, NPC_GENERIC, AUDIENCE_REPLIES } from './data.js';
-import { escapeHtml as esc } from './scene.js';
+import { escapeHtml as esc, FLOORS } from './scene.js';
+import { renderLibrary, renderWatchlist, renderProgram, memoryGame } from './floor-activities.js';
+import { loadMiner, strategyName } from './miner.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -34,9 +36,13 @@ export const ICON = {
   screen: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
-export const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n] || ''}</svg>`;
+export const icon = (n, cls = '') => `<svg class="ic ${cls}" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n] || ''}</svg>`;
 
 const PANELS = {
+  piso: { title: 'Explorar el piso', render: renderFloorGuide },
+  biblioteca: { title: 'Biblioteca', icon: 'cursos', render: (body) => renderLibrary(body, () => openPanel('cursos')) },
+  seguimiento: { title: 'Seguimiento', icon: 'analisis', render: (body) => renderWatchlist(body, (symbol) => openPanel('analisis', symbol)) },
+  programa: { title: 'Programa', icon: 'cursos', render: (body) => renderProgram(body, () => visit('tarima')) },
   salas: { title: 'Salas y aula', render: renderSalas },
   cursos: { title: 'Cursos', render: renderCursos },
   videoteca: { title: 'Videoteca', render: renderVideoteca },
@@ -64,11 +70,31 @@ export function initUI(w) {
   // dock
   $$('#dock [data-panel]').forEach((b) => b.addEventListener('click', () => {
     const p = b.dataset.panel;
-    if (p === 'piso') return closePanel();
     if (currentPanel === p) closePanel(); else openPanel(p);
   }));
   $('#drawerClose').addEventListener('click', closePanel);
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && currentPanel) closePanel(); });
+  $('#exploreFloor').addEventListener('click', () => {
+    if (currentPanel === 'piso') closePanel();
+    else openPanel('piso');
+  });
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && currentPanel && !document.querySelector('dialog[open]')) {
+      event.preventDefault();
+      closePanel();
+    }
+  });
+  const compact = matchMedia('(max-width: 760px)').matches;
+  $('#cameraTools').open = !compact;
+  const toggleMap = $('#mapToggle');
+  const map = $('#floorMap');
+  function setMap(open) {
+    map.hidden = !open;
+    toggleMap.setAttribute('aria-expanded', String(open));
+  }
+  setMap(!compact);
+  toggleMap.onclick = () => setMap(map.hidden);
+  paintFloor(world.floor);
+  syncPanels();
 
   // rol
   $$('#roleSwitch button').forEach((b) => b.addEventListener('click', () => setRole(b.dataset.role)));
@@ -76,7 +102,7 @@ export function initUI(w) {
 
   // perfil
   $('#meChip').addEventListener('click', () => window.dispatchEvent(new CustomEvent('pulso:edit-profile')));
-  $('#resetDemo')?.addEventListener('click', () => { if (confirm('¿Borrar el progreso, alertas y ajustes guardados en este navegador?')) reset(); });
+  $('#resetDemo')?.addEventListener('click', () => { if (confirm('¿Borrar las cuentas y todos los datos locales de Pulso en este navegador?')) reset(); });
 
   // zona
   $('#zonePrompt').addEventListener('click', () => { const z = world.currentZone; if (z) openPanel(z.panel, z.arg); });
@@ -85,7 +111,7 @@ export function initUI(w) {
   $$('#floors [data-floor]').forEach((b) => b.addEventListener('click', () => world.setFloor(+b.dataset.floor)));
   $$('#viewSwitch [data-view]').forEach((b) => b.addEventListener('click', () => world.setView(b.dataset.view)));
   // chat
-  initChat();
+  initChat(compact);
   // ticker
   market.on((type, d) => {
     if (type === 'tick') renderTicker();
@@ -93,6 +119,7 @@ export function initUI(w) {
     if (type === 'tick' && d?.symbol) checkPriceAlerts(d.symbol, d.price, d.prev);
   });
   renderStatus();
+  renderTicker();
 
   // contenido 3D inicial
   world.setKiosks(allCourses(), doneCount);
@@ -111,44 +138,126 @@ function setRole(r) {
 }
 function syncRole() {
   document.body.dataset.role = store.role;
-  $$('#roleSwitch button').forEach((b) => b.classList.toggle('on', b.dataset.role === store.role));
+  $$('#roleSwitch button').forEach((b) => {
+    const active = b.dataset.role === store.role;
+    b.classList.toggle('on', active);
+    b.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function zoneLabel(zone) {
+  return zone.id.startsWith('kiosk') ? allCourses()[zone.arg]?.title ?? 'Curso' : zone.label;
 }
 
 export function onZone(zone) {
   const el = $('#zonePrompt');
   if (!zone) { el.hidden = true; return; }
-  let label = zone.label;
-  if (zone.id.startsWith('kiosk')) label = `Curso: ${allCourses()[zone.arg]?.title ?? ''}`;
-  el.innerHTML = `<kbd>E</kbd><span>Abrir <b>${esc(label)}</b></span>`;
+  el.innerHTML = `<kbd aria-hidden="true">E</kbd><span>Abrir <b>${esc(zoneLabel(zone))}</b></span>`;
   el.hidden = false;
 }
 export function onInteract(zone) { openPanel(zone.panel, zone.arg); }
 
+function visit(id) {
+  const here = world.currentZone?.id === id;
+  if (!world.goToZone(id)) {
+    toast('No se encontró una ruta', 'Acércate a la zona o abre su panel desde Explorar.');
+    return;
+  }
+  if (here) return;
+  closePanel();
+  const destination = world.destinations().find((zone) => zone.id === id);
+  if (destination) toast(`Caminando a ${zoneLabel(destination)}`);
+}
+
+function renderFloorGuide(body) {
+  const floor = FLOORS.find(({ n }) => n === world.floor);
+  const destinations = world.destinations().filter((zone) => !zone.id.startsWith('kiosk') || allCourses()[zone.arg]);
+  if (!destinations.length) return;
+  body.innerHTML = `
+    <section class="floor-explorer">
+      <h3>${floor.name}</h3>
+      <p>${floor.description}. Abre una actividad o camina hasta ella.</p>
+    </section>
+    <div class="floor-directory">
+      ${destinations.map((zone) => {
+        const label = zoneLabel(zone);
+        const activity = PANELS[zone.panel];
+        return `<article class="floor-destination">
+          <button type="button" class="destination-open" data-open-zone="${zone.id}" aria-label="Abrir ${esc(label)}">
+            <span class="destination-icon" aria-hidden="true">${icon(activity.icon ?? zone.panel)}</span>
+            <span><strong>${esc(label)}</strong><small>${esc(zone.detail)}</small></span>
+          </button>
+          <button type="button" class="btn sm" data-visit-zone="${zone.id}" aria-label="Caminar a ${esc(label)}">Ir ${icon('chev')}</button>
+        </article>`;
+      }).join('')}
+    </div>
+    <details class="floor-shortcuts"><summary>Controles del piso</summary>
+      <p>WASD o un toque en el piso para moverte. Arrastra para cambiar el ángulo, usa V para cambiar de cámara y E para abrir una actividad cercana.</p>
+    </details>`;
+  for (const button of body.querySelectorAll('[data-open-zone]')) {
+    button.onclick = () => onInteract(destinations.find((zone) => zone.id === button.dataset.openZone));
+  }
+  for (const button of body.querySelectorAll('[data-visit-zone]')) {
+    button.onclick = () => visit(button.dataset.visitZone);
+  }
+}
+
 // ============ paneles ============
 let lastArg;
+let hideDrawer;
+let returnFocus;
+function syncPanels() {
+  $$('#dock [data-panel]').forEach((button) => {
+    const active = button.dataset.panel === currentPanel;
+    button.classList.toggle('on', active);
+    button.setAttribute('aria-controls', 'drawer');
+    button.setAttribute('aria-expanded', String(active));
+  });
+  $('#exploreFloor').setAttribute('aria-expanded', String(currentPanel === 'piso'));
+}
 export function openPanel(name, arg) {
-  const P = PANELS[name]; if (!P) return;
-  if (P.owner && !isOwner()) { toast('Solo el dueño', 'Cambia a la vista de dueño para ver este panel.'); return; }
-  unmount?.(); unmount = null;
-  currentPanel = name; lastArg = arg;
+  const panel = PANELS[name];
+  if (!panel || !world) return;
+  if (panel.owner && !isOwner()) { toast('Solo el dueño', 'Cambia a la vista de dueño para ver este panel.'); return; }
+  clearTimeout(hideDrawer);
+  unmount?.();
+  unmount = null;
   const drawer = $('#drawer');
-  drawer.classList.toggle('wide', !!P.wide);
-  $('#drawerTitle').innerHTML = `${icon(name)}<span>${P.title}</span>`;
-  const body = $('#drawerBody');
-  body.scrollTop = 0;
-  const r = P.render(body, arg);
-  unmount = typeof r === 'function' ? r : null;
+  const active = document.activeElement;
+  if (active && !drawer.contains(active) && active !== document.body) returnFocus = active;
+  currentPanel = name;
+  lastArg = arg;
+  world.cancelNavigation();
+  drawer.classList.toggle('wide', Boolean(panel.wide));
+  const title = $('#drawerTitle');
+  title.innerHTML = `${icon(panel.icon ?? name)}<span>${panel.title}</span>`;
+  drawer.inert = false;
   drawer.hidden = false;
   document.body.classList.add('panel-open');
-  requestAnimationFrame(() => drawer.classList.add('open'));
-  $$('#dock [data-panel]').forEach((b) => b.classList.toggle('on', b.dataset.panel === name));
+  const body = $('#drawerBody');
+  const cleanup = panel.render(body, arg);
+  unmount = typeof cleanup === 'function' ? cleanup : null;
+  body.scrollTop = 0;
+  drawer.classList.add('open');
+  title.focus({ preventScroll: true });
+  syncPanels();
 }
 export function closePanel() {
-  unmount?.(); unmount = null; currentPanel = null;
+  if (!currentPanel) return;
+  unmount?.();
+  unmount = null;
+  currentPanel = null;
   document.body.classList.remove('panel-open');
-  const d = $('#drawer'); d.classList.remove('open');
-  setTimeout(() => { if (!currentPanel) d.hidden = true; }, 250);
-  $$('#dock [data-panel]').forEach((b) => b.classList.toggle('on', b.dataset.panel === 'piso'));
+  const drawer = $('#drawer');
+  if (drawer.contains(document.activeElement)) {
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    else document.activeElement.blur();
+  }
+  returnFocus = null;
+  drawer.inert = true;
+  drawer.classList.remove('open');
+  hideDrawer = setTimeout(() => { if (!currentPanel) drawer.hidden = true; }, 250);
+  syncPanels();
 }
 
 // ============ salas y aula ============
@@ -231,7 +340,7 @@ function renderSalas(body) {
       </form>
     </section>`;
 
-  $('#goAula')?.addEventListener('click', () => { world.goToZone('aula'); closePanel(); toast('Caminando al aula', 'Siéntate donde quieras.'); });
+  $('#goAula')?.addEventListener('click', () => visit('aula'));
   $('#prevSlide')?.addEventListener('click', () => { cls.manual = true; cls.index = (cls.index - 1 + SLIDES.length) % SLIDES.length; pushSlide(); });
   $('#nextSlide')?.addEventListener('click', () => { cls.manual = true; cls.index = (cls.index + 1) % SLIDES.length; pushSlide(); });
   $('#shareBtn')?.addEventListener('click', toggleShare);
@@ -368,18 +477,26 @@ function renderVideoteca(body) {
 
 // ============ análisis ============
 const an = { symbol: 'BTCUSDT', tf: '1h', last: null };
+let wallRequest = 0;
 export async function refreshWall(symbol = an.symbol, tf = an.tf) {
+  const request = ++wallRequest;
   const candles = await getCandles(symbol, tf);
   const a = analyze(candles);
-  an.last = { symbol, tf, candles, a };
-  world.setChart({ candles, a, name: SYMBOLS[symbol].name, tf: TIMEFRAMES[tf], price: a.price, live: market.status !== 'simulado', fmt: (v) => fmt(symbol, v) });
-  agentReport(symbol, tf, a);
-  return an.last;
+  const live = candlesAreLive(symbol, tf);
+  const report = { symbol, tf, candles, a, live };
+  if (request === wallRequest) {
+    an.last = report;
+    world.setChart({ candles, a, name: SYMBOLS[symbol].name, tf: TIMEFRAMES[tf], price: a.price, live, fmt: (v) => fmt(symbol, v) });
+    agentReport(symbol, tf, a);
+  }
+  return report;
 }
 
-function renderAnalisis(body) {
+function renderAnalisis(body, selectedSymbol) {
+  if (Object.hasOwn(SYMBOLS, selectedSymbol)) an.symbol = selectedSymbol;
   let charts = [];
-  let timer = 0;
+  let series, currentData;
+  let loadId = 0;
   body.innerHTML = `
     <div class="row gap wrap toolbar">
       <div class="seg" id="symSeg">${Object.entries(SYMBOLS).map(([k, v]) => `<button data-sym="${k}" class="${k === an.symbol ? 'on' : ''}">${v.short}</button>`).join('')}</div>
@@ -388,7 +505,7 @@ function renderAnalisis(body) {
     </div>
     <div class="an-grid">
       <div class="an-main">
-        <div class="card chart-card"><div class="chart-head"><b id="anName"></b><span id="anPrice" class="mono"></span><span id="anTrend" class="pill"></span></div><div id="chart" class="chart"></div><div id="rsiChart" class="chart rsi"></div></div>
+        <div class="card chart-card"><div class="chart-head"><b id="anName"></b><span id="anPrice" class="mono"></span><span id="anTrend" class="pill"></span></div><p id="anStatus" class="analysis-state" role="status">Cargando mercado…</p><div id="chart" class="chart"></div><div id="rsiChart" class="chart rsi"></div></div>
         <div class="card"><h4>Agenda del día <span class="pill">ejemplo</span></h4>
           <div class="list">${AGENDA.map((e) => `<div class="list-item tight"><span class="mono muted">${e.time}</span><span class="grow">${esc(e.title)}</span><span class="pill imp-${e.impact}">${e.impact}</span></div>`).join('')}</div>
         </div>
@@ -399,15 +516,33 @@ function renderAnalisis(body) {
         <div class="card" id="risk"></div>
       </div>
     </div>
-    <p class="hint">Niveles, tendencia y escenarios los calculan los agentes con datos reales del mercado. Es información de apoyo, no asesoría financiera. La plataforma no ejecuta operaciones.</p>`;
+    <p class="hint">El análisis muestra si las velas provienen del mercado o de la simulación de Pulso. El piso no ejecuta operaciones.</p>`;
 
+  const notice = body.querySelector('#anStatus');
   const load = async () => {
-    const { candles, a } = await refreshWall(an.symbol, an.tf);
-    const f = (v) => fmt(an.symbol, v);
-    $('#anName').textContent = `${SYMBOLS[an.symbol].name} · ${TIMEFRAMES[an.tf]}`;
-    $('#anPrice').textContent = f(a.price);
-    const t = $('#anTrend'); t.textContent = `Tendencia ${a.trend}`; t.className = `pill trend-${a.trend}`;
-    $('#tvLink').href = `https://www.tradingview.com/chart/?symbol=BINANCE:${an.symbol}`;
+    const id = ++loadId;
+    const { symbol, tf } = an;
+    notice.textContent = 'Cargando mercado…';
+    body.querySelector('#anName').textContent = `${SYMBOLS[symbol].name} · ${TIMEFRAMES[tf]}`;
+    body.querySelector('#tvLink').href = `https://www.tradingview.com/chart/?symbol=BINANCE:${symbol}`;
+    let report;
+    try {
+      report = await refreshWall(symbol, tf);
+    } catch (error) {
+      if (id !== loadId) return;
+      console.error(error);
+      notice.textContent = 'No se pudo cargar el análisis. Elige otro activo o intervalo.';
+      return;
+    }
+    if (id !== loadId) return;
+    currentData = report;
+    const { candles, a, live } = report;
+    const f = (v) => fmt(symbol, v);
+    notice.textContent = live ? 'Velas de mercado' : 'Velas simuladas';
+    body.querySelector('#anPrice').textContent = f(a.price);
+    const trend = body.querySelector('#anTrend');
+    trend.textContent = `Tendencia ${a.trend}`;
+    trend.className = `pill trend-${a.trend}`;
     $('#levels').innerHTML = `
       <h4>Niveles <span class="muted">· agente Niveles</span></h4>
       <div class="lv"><span class="r">R2</span><b class="mono">${f(a.levels.r2)}</b></div>
@@ -432,7 +567,7 @@ function renderAnalisis(body) {
   };
 
   const drawCharts = (candles, a) => {
-    charts.forEach((c) => c.remove()); charts = [];
+    charts.forEach((c) => c.remove()); charts = []; series = null;
     const LW = window.LightweightCharts;
     if (!LW) { $('#chart').innerHTML = '<p class="muted pad">No se pudo cargar la librería de gráficos.</p>'; return; }
     const base = {
@@ -460,21 +595,27 @@ function renderAnalisis(body) {
     rc.timeScale().setVisibleLogicalRange({ from: candles.length - 120, to: candles.length + 4 });
     ch.timeScale().subscribeVisibleLogicalRangeChange((r) => r && rc.timeScale().setVisibleLogicalRange(r));
     charts = [ch, rc];
-    an.series = cs;
+    series = cs;
   };
 
   $$('#symSeg button', body).forEach((b) => b.addEventListener('click', () => { an.symbol = b.dataset.sym; $$('#symSeg button').forEach((x) => x.classList.toggle('on', x === b)); load(); }));
   $$('#tfSeg button', body).forEach((b) => b.addEventListener('click', () => { an.tf = b.dataset.tf; $$('#tfSeg button').forEach((x) => x.classList.toggle('on', x === b)); load(); }));
   const off = market.on((type, d) => {
-    if (type !== 'tick' || d?.symbol !== an.symbol || !an.series || !an.last) return;
-    const k = an.last.candles[an.last.candles.length - 1];
+    if (type !== 'tick' || d?.symbol !== an.symbol || !series || currentData?.symbol !== an.symbol || currentData?.tf !== an.tf) return;
+    const k = currentData.candles.at(-1);
     k.close = d.price; k.high = Math.max(k.high, d.price); k.low = Math.min(k.low, d.price);
-    an.series.update({ ...k });
+    series.update({ ...k });
     const el = $('#anPrice'); if (el) el.textContent = fmt(an.symbol, d.price);
   });
   load();
-  timer = setInterval(load, 60000);
-  return () => { off(); clearInterval(timer); charts.forEach((c) => c.remove()); an.series = null; };
+  const timer = setInterval(load, 60000);
+  return () => {
+    loadId++;
+    off();
+    clearInterval(timer);
+    charts.forEach((chart) => chart.remove());
+    series = null;
+  };
 }
 
 function renderRisk(a, scen) {
@@ -554,6 +695,15 @@ async function runTask(agentId, text) {
   if (currentPanel === 'agentes') renderAgentes($('#drawerBody'));
 }
 
+// Estrategias que el minero del laboratorio dejó en la incubadora (solo simulación)
+function minerCard() {
+  const list = loadMiner().strategies;
+  const body = list.length
+    ? `<ul class="mini-list">${list.slice(0, 5).map((s) => `<li>${esc(strategyName(s))}</li>`).join('')}</ul><p class="muted">${list.length} en la incubadora. Los agentes del laboratorio las vigilan.</p>`
+    : '<p class="muted">Aún no hay estrategias. Mina algunas en el laboratorio.</p>';
+  return `<section class="card"><h4>Estrategias del minero</h4>${body}<a class="btn sm" href="#/lab">Abrir el laboratorio</a></section>`;
+}
+
 function renderAgentes(body) {
   body.innerHTML = `
     <div class="grid2">${AGENTS.map((a) => { const s = agentState[a.id]; return `
@@ -574,6 +724,7 @@ function renderAgentes(body) {
       </form>
     </section>
     <p class="hint member-only">Ves el trabajo de los agentes, pero solo el dueño les da tareas.</p>
+    ${minerCard()}
     <h4 class="section-t">Registro</h4>
     <div class="log">${agentLog.map((l) => `<div class="log-row"><span class="mono muted">${l.t}</span><span class="tag" style="--c:${l.agent.color}">${l.agent.name}</span><span>${esc(l.text)}</span></div>`).join('') || '<p class="muted">Sin actividad todavía.</p>'}</div>`;
   const f = $('#taskForm');
@@ -712,17 +863,35 @@ function renderMiembros(body) {
 
 // ============ chat de proximidad ============
 // ============ pisos y vistas ============
-const FLOOR_NAMES = { 1: 'Clases', 2: 'Análisis', 3: 'Conferencias', 4: 'Sala de juegos' };
-export function onFloor(n) {
-  $$('#floors [data-floor]').forEach((b) => b.classList.toggle('on', +b.dataset.floor === n));
-  const f = $('#fade'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
-  toast(`Piso ${n}`, FLOOR_NAMES[n]);
-  if (currentPanel && !['cursos', 'alertas', 'conexiones', 'miembros'].includes(currentPanel)) closePanel();
+function paintFloor(number) {
+  const floor = FLOORS.find(({ n }) => n === number);
+  $('#app').style.setProperty('--level-color', floor.color);
+  $('#floorLevel').textContent = `Piso ${floor.n}`;
+  $('#floorName').textContent = floor.name;
+  $('#floorDetail').textContent = floor.description;
+  for (const button of $$('#floors [data-floor]')) {
+    const selected = Number(button.dataset.floor) === number;
+    button.classList.toggle('on', selected);
+    if (selected) button.setAttribute('aria-current', 'location');
+    else button.removeAttribute('aria-current');
+  }
 }
-export function onView(v) {
-  $$('#viewSwitch [data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
-  if (v === 'primera') toast('Primera persona', 'Arrastra para mirar y usa WASD para moverte.');
-  if (v === 'maqueta') toast('Maqueta', 'Arrastra para girar, rueda para acercar y clic para caminar.');
+export function onFloor(number) {
+  paintFloor(number);
+  const fade = $('#fade');
+  fade.classList.remove('go');
+  void fade.offsetWidth;
+  fade.classList.add('go');
+  if (currentPanel === 'piso') openPanel('piso');
+  else if (currentPanel && !['cursos', 'alertas', 'conexiones', 'miembros'].includes(currentPanel)) closePanel();
+}
+export function onView(view) {
+  for (const button of $$('#viewSwitch [data-view]')) {
+    const selected = button.dataset.view === view;
+    button.classList.toggle('on', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    if (selected) $('#cameraName').textContent = button.textContent.trim();
+  }
 }
 
 // ============ conferencia ============
@@ -747,7 +916,7 @@ function renderConferencia(body) {
       <button class="btn ${screenStream ? 'danger' : 'primary'}" id="shareBtn">${icon('screen')} ${screenStream ? 'Dejar de compartir' : 'Compartir pantalla'}</button>
     </section>
     <p class="hint">Consejo: cambia a primera persona (tecla V) para ver a la audiencia desde el escenario.</p>`;
-  $('#goStage')?.addEventListener('click', () => { world.goToZone('tarima'); closePanel(); });
+  $('#goStage')?.addEventListener('click', () => visit('tarima'));
   $('#cPrev').addEventListener('click', () => { cls.manual = true; cls.index = (cls.index - 1 + SLIDES.length) % SLIDES.length; pushSlide(); });
   $('#cNext').addEventListener('click', () => { cls.manual = true; cls.index = (cls.index + 1) % SLIDES.length; pushSlide(); });
   $('#cClap').addEventListener('click', () => world.applause('👏'));
@@ -757,26 +926,42 @@ function renderConferencia(body) {
 // ============ sala de juegos ============
 let gameTimer = 0;
 function renderJuegos(body, arg) {
-  let game = arg === 1 ? 'reflejos' : 'vela';
+  const games = [
+    ['vela', 'Sube o baja', gameVela], ['reflejos', 'Reflejos', gameReflejos], ['memoria', 'Memoria', memoryGame],
+  ];
+  let game = games[arg]?.[0] ?? 'vela', cleanup;
   store.games ||= { vela: 0, reflejos: 0 };
+  const clearGame = () => { clearInterval(gameTimer); cleanup?.(); cleanup = null; };
   const paint = () => {
-    clearInterval(gameTimer);
-    body.innerHTML = `<div class="seg"><button data-g="vela" class="${game === 'vela' ? 'on' : ''}">Sube o baja</button><button data-g="reflejos" class="${game === 'reflejos' ? 'on' : ''}">Reflejos</button></div><div id="gbox" class="gbox"></div>`;
-    $$('[data-g]', body).forEach((b) => b.addEventListener('click', () => { game = b.dataset.g; paint(); }));
-    (game === 'vela' ? gameVela : gameReflejos)($('#gbox'));
+    clearGame();
+    body.innerHTML = `<div class="seg floor-seg" aria-label="Juegos" role="group">${games.map(([id, label]) =>
+      `<button type="button" data-g="${id}" aria-pressed="${game === id}">${label}</button>`).join('')}</div><div id="gbox" class="gbox"></div>`;
+    for (const button of body.querySelectorAll('[data-g]')) {
+      button.addEventListener('click', () => {
+        if (game === button.dataset.g) return;
+        game = button.dataset.g;
+        paint();
+        body.querySelector('[aria-pressed="true"]').focus();
+      });
+    }
+    const onClose = games.find(([id]) => id === game)[2](body.querySelector('#gbox'));
+    if (typeof onClose === 'function') cleanup = onClose;
   };
   paint();
-  return () => clearInterval(gameTimer);
+  return clearGame;
 }
 
-async function gameVela(box) {
-  const g = store.games; let streak = 0, data = null, answered = false;
-  box.innerHTML = `<p class="muted">Mira las últimas velas de un activo real y adivina si el precio estará más arriba o más abajo 3 velas después.</p>
-    <div class="row between"><b id="vSym"></b><span class="muted">Racha: <b id="vStreak">0</b> · Récord: <b id="vBest">${g.vela}</b></span></div>
+function gameVela(box) {
+  const g = store.games; let streak = 0, data = null, answered = false, active = true;
+  box.innerHTML = `<p class="muted">Mira el gráfico y adivina si el precio estará más arriba o más abajo tres velas después.</p>
+    <div class="row between"><b id="vSym">Cargando velas…</b><span class="muted">Racha: <b id="vStreak">0</b> · Récord: <b id="vBest">${g.vela}</b></span></div>
     <canvas id="vCv" width="460" height="220" class="vcv"></canvas>
-    <p id="vMsg" class="vmsg"></p>
-    <div class="row gap"><button class="btn primary grow" data-a="up">▲ Sube</button><button class="btn grow" data-a="down">▼ Baja</button><button class="btn" id="vNext" hidden>Siguiente</button></div>`;
-  const cv = $('#vCv'), ctx = cv.getContext('2d');
+    <p id="vMsg" class="vmsg" role="status"></p>
+    <div class="row gap"><button class="btn primary grow" data-a="up" disabled>▲ Sube</button><button class="btn grow" data-a="down" disabled>▼ Baja</button><button class="btn" id="vNext" hidden>Siguiente</button></div>`;
+  const cv = $('#vCv', box), ctx = cv.getContext('2d');
+  const choices = $$('[data-a]', box);
+  const message = $('#vMsg', box);
+  const nextButton = $('#vNext', box);
   const draw = (candles, mark) => {
     ctx.clearRect(0, 0, cv.width, cv.height);
     const hi = Math.max(...candles.map((k) => k.high)), lo = Math.min(...candles.map((k) => k.low)), cw = cv.width / (candles.length + 1);
@@ -789,25 +974,40 @@ async function gameVela(box) {
     });
   };
   const next = async () => {
-    answered = false; $('#vMsg').textContent = ''; $('#vNext').hidden = true;
-    box.querySelectorAll('[data-a]').forEach((b) => (b.disabled = false));
-    const sym = Object.keys(SYMBOLS)[(Math.random() * 4) | 0];
-    const c = await getCandles(sym, '1h', 300), i = 50 + ((Math.random() * (c.length - 70)) | 0);
-    data = { sym, view: c.slice(i - 40, i), next: c.slice(i, i + 3) };
-    $('#vSym').textContent = `${SYMBOLS[sym].name} · 1 h`; draw(data.view);
+    answered = false;
+    data = null;
+    message.textContent = 'Cargando una ronda…';
+    nextButton.hidden = true;
+    choices.forEach((button) => { button.disabled = true; });
+    const symbols = Object.keys(SYMBOLS);
+    const sym = symbols[Math.floor(Math.random() * symbols.length)];
+    const c = await getCandles(sym, '1h', 300);
+    if (!active) return;
+    if (c.length < 43) {
+      message.textContent = 'No hay suficientes velas. Intenta otra ronda.';
+      nextButton.hidden = false;
+      return;
+    }
+    const i = 40 + Math.floor(Math.random() * (c.length - 42));
+    data = { view: c.slice(i - 40, i), next: c.slice(i, i + 3) };
+    $('#vSym', box).textContent = `${SYMBOLS[sym].name} · ${candlesAreLive(sym, '1h') ? 'mercado' : 'simulado'}`;
+    message.textContent = '';
+    choices.forEach((button) => { button.disabled = false; });
+    draw(data.view);
   };
-  box.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => {
+  choices.forEach((b) => b.addEventListener('click', () => {
     if (answered || !data) return; answered = true;
     const last = data.view[data.view.length - 1].close, end = data.next[2].close, up = end > last;
     const ok = (b.dataset.a === 'up') === up; streak = ok ? streak + 1 : 0;
     if (streak > g.vela) { g.vela = streak; save(); }
     draw([...data.view, ...data.next], data.view.length);
-    $('#vMsg').innerHTML = `${ok ? '<b class="up">¡Acertaste!</b>' : '<b class="down">Fallaste.</b>'} El precio ${up ? 'subió' : 'bajó'} ${(Math.abs(end - last) / last * 100).toFixed(2)} %.`;
-    $('#vStreak').textContent = streak; $('#vBest').textContent = g.vela; $('#vNext').hidden = false;
-    box.querySelectorAll('[data-a]').forEach((x) => (x.disabled = true));
+    message.innerHTML = `${ok ? '<b class="up">¡Acertaste!</b>' : '<b class="down">Fallaste.</b>'} El precio ${up ? 'subió' : 'bajó'} ${(Math.abs(end - last) / last * 100).toFixed(2)} %.`;
+    $('#vStreak', box).textContent = streak; $('#vBest', box).textContent = g.vela; nextButton.hidden = false;
+    choices.forEach((x) => (x.disabled = true));
   }));
-  $('#vNext').addEventListener('click', next);
+  nextButton.addEventListener('click', next);
   next();
+  return () => { active = false; };
 }
 
 function gameReflejos(box) {
@@ -816,15 +1016,21 @@ function gameReflejos(box) {
     <div class="row between"><span>Puntos: <b id="rS">0</b></span><span id="rT" class="muted">30 s</span><span class="muted">Récord: <b id="rB">${g.reflejos}</b></span></div>
     <div id="arena" class="arena"></div><button class="btn primary mt12" id="rGo">Empezar</button>`;
   const arena = $('#arena');
-  const spawn = () => {
+  const spawn = (keyboard = arena.contains(document.activeElement)) => {
     arena.innerHTML = ''; if (!on) return;
     const t = document.createElement('button'); t.className = 'tgt'; t.setAttribute('aria-label', 'Objetivo');
     t.style.left = Math.random() * (arena.clientWidth - 48) + 'px'; t.style.top = Math.random() * (arena.clientHeight - 48) + 'px';
-    t.addEventListener('pointerdown', () => { score++; $('#rS').textContent = score; spawn(); });
+    t.addEventListener('click', (event) => { score++; $('#rS', box).textContent = score; spawn(event.detail === 0); });
     arena.appendChild(t);
+    if (keyboard) t.focus({ preventScroll: true });
   };
-  $('#rGo').addEventListener('click', () => {
-    clearInterval(gameTimer); score = 0; left = 30; on = true; $('#rS').textContent = 0; $('#rGo').disabled = true; spawn();
+  $('#rGo', box).addEventListener('click', (event) => {
+    clearInterval(gameTimer);
+    score = 0; left = 30; on = true;
+    $('#rS', box).textContent = 0;
+    $('#rT', box).textContent = '30 s';
+    $('#rGo', box).disabled = true;
+    spawn(event.detail === 0);
     gameTimer = setInterval(() => {
       left--; $('#rT').textContent = left + ' s';
       if (left <= 0) {
@@ -836,7 +1042,7 @@ function gameReflejos(box) {
 }
 
 const CHAT_RADIUS = 8;
-function initChat() {
+function initChat(compact) {
   const form = $('#chatForm'), input = $('#chatInput');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -865,7 +1071,14 @@ function initChat() {
       }, 1200 + i * 1400 + Math.random() * 800);
     });
   });
-  $('#chatToggle').addEventListener('click', () => $('#chat').classList.toggle('collapsed'));
+  const toggle = $('#chatToggle');
+  const chat = $('#chat');
+  function setChat(open) {
+    chat.classList.toggle('collapsed', !open);
+    toggle.setAttribute('aria-expanded', String(open));
+  }
+  setChat(!compact);
+  toggle.addEventListener('click', () => setChat(chat.classList.contains('collapsed')));
   if (innerWidth < 760) $('#chat').classList.add('collapsed');
   setInterval(() => {
     const near = world.nearby(CHAT_RADIUS);
@@ -895,7 +1108,9 @@ function renderTicker() {
 function renderStatus() {
   const s = market.status;
   $('#liveStatus').className = `status ${s === 'en vivo' ? 'ok' : s === 'simulado' ? 'warn' : ''}`;
-  $('#liveStatus').title = s === 'en vivo' ? 'Precios en vivo' : s === 'simulado' ? 'Sin conexión: precios simulados' : 'Conectando…';
+  const label = s === 'en vivo' ? 'En vivo' : s === 'simulado' ? 'Simulado' : 'Conectando';
+  $('#liveStatus').title = label;
+  $('#marketSource').textContent = label;
 }
 export function toast(title, body = '', kind = '') {
   const el = document.createElement('div');
