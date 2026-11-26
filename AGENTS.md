@@ -34,3 +34,18 @@ Idioma de la interfaz y del contenido: **español**. Sin bundler ni npm: módulo
 - Webhook real de TradingView y agentes con modelo de lenguaje.
 - Ajustar la posición de gafas y gorra (`GL` y `CAP` en `js/human.js`).
 - Más personajes de Rocketbox (hay ~40 adultos, niños y profesiones).
+
+## Estado actual (relevo entre IAs)
+Hecho y probado en navegador:
+- 4 pisos: 1 Clases, 2 Análisis, 3 Conferencias (tarima + audiencia sentada), 4 Sala de juegos (2 minijuegos). Selector a la derecha y teclas 1-4.
+- 3 vistas de cámara (tecla V): primera persona, tercera persona, maqueta.
+- Login local, creador de personaje (galería de 22 personas Rocketbox + altura, complexión, tinte de piel y pelo, gafas/gorra).
+- Decoración por piso (biblioteca, centro de cómputo, trading desks, foyer, bar, casino, arcades).
+
+Notas técnicas:
+- Los avatares se cargan con `preloadAvatars()` antes de crear el mundo o el creador.
+- Las cuentas viejas sin `model` se normalizan solas en `normalize()` de `js/human.js`.
+- `server.ps1` acepta `POST /__save?path=assets/...` solo para guardar archivos convertidos; es una herramienta local de desarrollo.
+- Repositorio: https://github.com/rayanelyasin/proyecto-trading-floor (rama `master`).
+
+Flujo de trabajo: leer este archivo, abrir `Abrir Pulso.cmd`, hacer cambios pequeños, verificar en el navegador, `git add -A`, `git commit`, `git push`.
