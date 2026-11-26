@@ -5,6 +5,22 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 const directory = new URL('../assets/editable/', import.meta.url);
 const pending = new Map();
 const models = new Map();
+let jointsRequest;
+let jointMorphs;
+
+function loadJointMorphs() {
+  jointsRequest ??= fetch(new URL('base_body.joints.json', directory))
+    .then((response) => {
+      if (!response.ok) throw new Error('No se pudieron cargar los ajustes del esqueleto.');
+      return response.json();
+    })
+    .then(({ morphs }) => { jointMorphs = morphs; })
+    .catch((error) => {
+      jointsRequest = undefined;
+      throw error;
+    });
+  return jointsRequest;
+}
 
 function load(file) {
   if (!pending.has(file)) {
@@ -32,6 +48,13 @@ export const HAIR = [
   ['ponytail01', 'Coleta'], ['braid01', 'Trenza'], ['afro01', 'Afro'],
 ];
 
+export const TOPS = [
+  ['tshirt', 'Camiseta'], ['shirt', 'Camisa'], ['hoodie', 'Sudadera'], ['dress', 'Vestido'],
+];
+export const BOTTOMS = [['jeans', 'Pantalón'], ['shorts', 'Short'], ['skirt', 'Falda']];
+export const SHOES = [['shoes', 'Zapatos'], ['boots', 'Botines']];
+const clothingOptions = { top: TOPS, bottom: BOTTOMS, shoes: SHOES };
+
 export const BODY_CONTROLS = [
   ['shape', 'Forma corporal', -1, 1], ['height', 'Altura', 0.88, 1.12],
   ['age', 'Edad adulta', 0, 1], ['weight', 'Peso', -1, 1], ['muscle', 'Musculatura', -1, 1],
@@ -55,6 +78,9 @@ export function normalizeEditable(config) {
     if (!/^#[a-f0-9]{6}$/i.test(c[key])) c[key] = EDITABLE_DEFAULT[key];
   }
   if (!HAIR.some(([id]) => id === c.hair)) c.hair = EDITABLE_DEFAULT.hair;
+  for (const [slot, options] of Object.entries(clothingOptions)) {
+    if (!options.some(([id]) => id === c[slot])) c[slot] = EDITABLE_DEFAULT[slot];
+  }
   return c;
 }
 
@@ -78,19 +104,23 @@ export function updateEditableAvatar(avatar, config) {
     weights[low] = Math.max(0, -c[key]) * factor;
     weights[high] = Math.max(0, c[key]) * factor;
   }
+  for (const name of Object.keys(jointMorphs)) {
+    if (!name.startsWith('corr_')) continue;
+    const [a, b] = name.slice(5).split('__');
+    weights[name] = (weights[a] ?? 0) * (weights[b] ?? 0);
+  }
+  updateJointOffsets(avatar, weights);
   for (const mesh of avatar.meshes) {
     for (const [name, i] of Object.entries(mesh.morphTargetDictionary ?? {})) {
-      if (name.startsWith('corr_')) {
-        const [a, b] = name.slice(5).split('__');
-        mesh.morphTargetInfluences[i] = (weights[a] ?? 0) * (weights[b] ?? 0);
-      } else {
-        mesh.morphTargetInfluences[i] = weights[name] ?? 0;
-      }
+      const [a, b] = name.startsWith('corr_') ? name.slice(5).split('__') : [];
+      mesh.morphTargetInfluences[i] = a ? (weights[a] ?? 0) * (weights[b] ?? 0) : weights[name] ?? 0;
     }
     const material = mesh.material;
     if (material.name === 'Skin') material.color.copy(material.userData.baseColor).multiply(new THREE.Color(c.skin));
     if (material.name === 'Iris') material.color.set(c.eyeColor);
     if (material.name.startsWith('Hair_')) material.color.set(c.hairTint);
+    const slotColor = mesh.userData.pulsoColor;
+    if (slotColor) material.color.set(c[slotColor]);
   }
 }
 
@@ -99,7 +129,9 @@ const filesFor = (c) => [garment(c.top), ...(c.top === 'dress' ? [] : [garment(c
 
 export function loadEditableAvatar(config) {
   const c = normalizeEditable(config);
-  return Promise.all(['body.glb', ...filesFor(c), ...(c.hair === 'none' ? [] : [`hair_${c.hair}.glb`])].map(load));
+  const files = ['body.glb', ...filesFor(c)];
+  if (c.hair !== 'none') files.push(`hair_${c.hair}.glb`);
+  return Promise.all([loadJointMorphs(), ...files.map(load)]);
 }
 
 function meshWithin(root) {
@@ -120,11 +152,16 @@ function addPiece(body, file) {
   return mesh;
 }
 
-const COVERAGE = { tshirt: 8, jeans: 2, shoes: 1 };
+// Bits de las zonas de la malla CC0, según el catálogo publicado por CharacterCreator.
+const COVERAGE = {
+  shoes: 1, jeans: 2, skirt: 4, tshirt: 8, shorts: 256,
+  shirt: 512, hoodie: 1024, dress: 2048, boots: 8192,
+};
 const maskedBodies = new Map();
 
 function coverBody(body, config) {
-  const mask = COVERAGE[config.top] | COVERAGE[config.bottom] | COVERAGE[config.shoes];
+  const mask = COVERAGE[config.top] | COVERAGE[config.shoes]
+    | (config.top === 'dress' ? 0 : COVERAGE[config.bottom]);
   if (!maskedBodies.has(mask)) {
     const source = body.geometry;
     const zone = source.getAttribute('_cczone');
@@ -142,6 +179,34 @@ function coverBody(body, config) {
     maskedBodies.set(mask, geometry);
   }
   body.geometry = maskedBodies.get(mask);
+}
+
+function updateJointOffsets(avatar, weights) {
+  const worldOffsets = new Map();
+  const delta = new THREE.Vector3();
+  for (const [name, weight] of Object.entries(weights)) {
+    if (!weight) continue;
+    for (const [bone, offset] of Object.entries(jointMorphs[name] ?? {})) {
+      if (!worldOffsets.has(bone)) worldOffsets.set(bone, new THREE.Vector3());
+      worldOffsets.get(bone).addScaledVector(delta.fromArray(offset), weight);
+    }
+  }
+  const zero = new THREE.Vector3();
+  const translation = new THREE.Matrix4();
+  for (const joint of avatar.joints) {
+    const { bone, offset, parentInverseRotation } = joint;
+    const world = worldOffsets.get(bone.name) ?? zero;
+    const parent = worldOffsets.get(bone.parent.name) ?? zero;
+    bone.position.sub(offset);
+    offset.copy(world).sub(parent).applyQuaternion(parentInverseRotation);
+    bone.position.add(offset);
+  }
+  for (const { skeleton, rest } of avatar.skins) {
+    skeleton.bones.forEach((bone, i) => {
+      const { x, y, z } = worldOffsets.get(bone.name) ?? zero;
+      skeleton.boneInverses[i].copy(rest[i]).multiply(translation.makeTranslation(-x, -y, -z));
+    });
+  }
 }
 
 function aim(root, from, to, direction) {
@@ -201,7 +266,9 @@ export function buildEditableAvatar(config) {
   const root = clone(asset.scene);
   const body = root.getObjectByName('Body');
   coverBody(body, c);
-  for (const file of filesFor(c)) addPiece(body, file);
+  addPiece(body, garment(c.top)).userData.pulsoColor = 'topColor';
+  if (c.top !== 'dress') addPiece(body, garment(c.bottom)).userData.pulsoColor = 'bottomColor';
+  addPiece(body, garment(c.shoes)).userData.pulsoColor = 'shoeColor';
   if (c.hair !== 'none') addPiece(body, `hair_${c.hair}.glb`);
   const meshes = [];
   root.traverse((object) => {
@@ -226,10 +293,28 @@ export function buildEditableAvatar(config) {
     action.setEffectiveWeight(clip.name === 'idle' ? 1 : 0);
     actions[clip.name] = action;
   }
+  const template = new Map(asset.scene.getObjectByName('Body').skeleton.bones.map((bone) => [bone.name, bone]));
+  const joints = body.skeleton.bones.map((bone) => ({
+    bone,
+    offset: new THREE.Vector3(),
+    parentInverseRotation: template.get(bone.name).parent.getWorldQuaternion(new THREE.Quaternion()).invert(),
+  }));
+  const skeletons = new Set(meshes.filter((mesh) => mesh.isSkinnedMesh).map((mesh) => mesh.skeleton));
+  const skins = [...skeletons].map((skeleton) => {
+    const rest = skeleton.boneInverses;
+    skeleton.boneInverses = rest.map((matrix) => matrix.clone());
+    return { skeleton, rest };
+  });
   mixer.update(0);
   const group = new THREE.Group();
   group.add(root);
-  const avatar = { group, root, mixer, actions, meshes };
+  const avatar = { group, root, mixer, actions, meshes, joints, skins,
+    updateAnimation(dt) {
+      for (const { bone, offset } of joints) bone.position.sub(offset);
+      mixer.update(dt);
+      for (const { bone, offset } of joints) bone.position.add(offset);
+    },
+  };
   updateEditableAvatar(avatar, c);
   return avatar;
 }

@@ -119,5 +119,6 @@ export function animateAvatar(av, walking, speed, dt) {
   for (const [k, a] of Object.entries(m.actions)) { const w = a.getEffectiveWeight(), t = k === want ? 1 : 0; a.setEffectiveWeight(w + (t - w) * Math.min(1, dt * 8)); }
   if (m.actions.walk) m.actions.walk.timeScale = THREE.MathUtils.clamp(speed / 1.4, 0.7, 1.5);
   if (m.actions.run) m.actions.run.timeScale = THREE.MathUtils.clamp(speed / 3.6, 0.8, 1.4);
-  m.mixer.update(dt);
+  if (m.updateAnimation) m.updateAnimation(dt);
+  else m.mixer.update(dt);
 }

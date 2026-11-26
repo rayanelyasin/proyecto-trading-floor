@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildAvatar, animateAvatar, randomAvatar, OPTIONS, DEFAULT_AVATAR, MODELS } from './human.js';
 
 import {
-  BODY_CONTROLS, FACE_CONTROLS, HAIR,
+  BODY_CONTROLS, BOTTOMS, FACE_CONTROLS, HAIR, SHOES, TOPS,
   loadEditableAvatar, normalizeEditable, updateEditableAvatar,
 } from './editable-avatar.js';
 
@@ -21,6 +21,11 @@ const MODERN_TABS = [
   ['Cuerpo', [...rangeControls(BODY_CONTROLS), ['color', 'skin', 'Tono de piel']]],
   ['Rostro', [...rangeControls(FACE_CONTROLS), ['color', 'eyeColor', 'Color de ojos']]],
   ['Peinado', [['choice', 'hair', 'Estilo', HAIR], ['color', 'hairTint', 'Color de pelo']]],
+  ['Ropa', [
+    ['choice', 'top', 'Parte superior o vestido', TOPS], ['color', 'topColor', 'Color de la parte superior'],
+    ['choice', 'bottom', 'Parte inferior', BOTTOMS], ['color', 'bottomColor', 'Color de la parte inferior'],
+    ['choice', 'shoes', 'Calzado', SHOES], ['color', 'shoeColor', 'Color del calzado'],
+  ]],
 ];
 
 // Devuelve { avatar, name } al guardar, o null si se cancela.
@@ -162,7 +167,9 @@ export function openCreator({ initial, name = '', first = false } = {}) {
         button.classList.toggle('on', selected);
         button.setAttribute('aria-pressed', selected);
       });
-      box.innerHTML = tabs[tab][1].map(([kind, key, label, a, b]) => {
+      box.innerHTML = tabs[tab][1]
+        .filter(([, key]) => !modern || cfg.top !== 'dress' || !['bottom', 'bottomColor'].includes(key))
+        .map(([kind, key, label, a, b]) => {
         if (kind === 'gallery') return `<div class="cr-group"><span class="lbl">${label}</span><div class="cr-gallery">${MODELS[cfg.gender].map((n) => `<button type="button" class="cr-th ${cfg.model === n ? 'on' : ''}" data-k="model" data-v="${n}" aria-label="${n}"><img src="assets/rb/thumbs/${n}.jpg" alt=""></button>`).join('')}</div></div>`;
         if (kind === 'swatch') return `<div class="cr-group"><span class="lbl">${label}</span><div class="cr-swatches">${a.map((c) => `<button type="button" class="cr-sw ${cfg[key] === c ? 'on' : ''}" data-k="${key}" data-v="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('')}</div></div>`;
         if (kind === 'color') return `<label class="cr-group"><span class="lbl">${label}</span><input type="color" value="${cfg[key]}" data-k="${key}" data-color></label>`;
