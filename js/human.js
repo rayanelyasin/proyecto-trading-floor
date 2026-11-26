@@ -126,4 +126,27 @@ export function animateAvatar(av, walking, speed, dt) {
   if (m.actions.run) m.actions.run.timeScale = THREE.MathUtils.clamp(speed / 3.6, 0.8, 1.4);
   if (m.updateAnimation) m.updateAnimation(dt);
   else m.mixer.update(dt);
+  if (av.seated && !av.glide && !talking) typeOnKeyboard(m, av);
+}
+
+// Tecleo procedural: pequeños golpes alternos de muñeca y antebrazo sobre la pose sentada.
+const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+function typeOnKeyboard(m, av) {
+  if (!m.typeBones) {
+    const bones = { l: [], r: [] };
+    m.root.traverse((o) => {
+      if (!o.isBone) return;
+      const name = o.name.toLowerCase();
+      if (!/(hand|forearm|lowerarm)/.test(name) || /(finger|thumb|index|middle|ring|pinky|twist)/.test(name)) return;
+      bones[/(^|[_\s.])l([_\s.]|$)|_l$|left/.test(name) ? 'l' : 'r'].push(o);
+    });
+    m.typeBones = bones; m.typePhase = Math.random() * 6;
+  }
+  const t = performance.now() / 1000 + m.typePhase;
+  for (const [side, list] of Object.entries(m.typeBones)) {
+    const k = side === 'l' ? 0 : 1.9;
+    const burst = Math.max(0, Math.sin(t * 1.3 + k)) ** 2;           // ráfagas de tecleo con pausas
+    const tap = Math.sin(t * 17 + k * 3) * 0.06 * burst + Math.sin(t * 6 + k) * 0.015;
+    for (const b of list) { _e.set(tap, 0, tap * 0.4); _q.setFromEuler(_e); b.quaternion.multiply(_q); }
+  }
 }

@@ -19,6 +19,13 @@ Los tres edificios son interiores del mismo motor 3D de Pulso (`js/scene.js`): m
 - **Cámara:** girar (arrastrar), acercar y alejar (rueda, pellizco y botones) y seguir al personaje.
 - **Editor de avatar:** se abre con tu personaje actual; permite peinado, color de pelo, barba (6 estilos moldeados sobre la piel), tono de piel, rasgos, complexión, ropa, zapatos y accesorios (gafas, gafas de sol, gorra, gorro, audífonos, aretes). Vista 3D en vivo, giro, deshacer y rehacer; al guardar se usa en el campus y en los tres edificios.
 
+## Ronda 26/11/2026
+- **Cámara en 3ª persona** inclinable: arrastrar verticalmente cambia la elevación (como en Maqueta).
+- **Arranque y frenada suaves:** la velocidad sube y baja gradualmente, el avatar gira antes de caminar si el destino queda atrás y frena al llegar; el ciclo de paso sigue la velocidad real.
+- **Tecleo** al estar sentado (jugador y agentes): ráfagas de muñeca y antebrazo sobre la pose sentada (`typeOnKeyboard` en `js/human.js`).
+- **Corrección:** estando sentado, elegir otro destino ahora te levanta y camina (antes la ruta fallaba porque el escritorio bloqueaba el asiento).
+- Las fichas de agentes de los pisos 5 y 6 muestran «Modo simulado».
+
 ## Probado en el navegador (escritorio y 375 px)
 - Campus: puertas, aviso «Entrar», acceso rápido, entrada y salida de los tres edificios, minimapa, lugares del dueño guardados en el navegador y en el servidor.
 - Edificios: pisos 1 a 4, las 10 zonas del laboratorio y las de Mi oficina IA abren sus paneles, el trabajo simulado hace hablar a los agentes, la minería corre desde el panel.

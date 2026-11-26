@@ -748,7 +748,7 @@ function renderAgenteOficina(body, key) {
   if (!s) { body.innerHTML = '<p class="muted">Este agente no está disponible.</p>'; return; }
   if (s.floor === 5) {
     const talk = feedFor(s.id);
-    body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="dot busy"></span></div><span class="muted">${esc(s.role)}</span>
+    body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="pill warn">Modo simulado</span></div><span class="muted">${esc(s.role)}</span>
       <div class="agent-status">Trabajando en el laboratorio</div><p>${esc(s.focus)}</p></section>
       <h4 class="section-t">Lo último que dijo</h4><div class="log">${talk.map((m) => `<div class="log-row"><span class="mono muted">${m.t}</span><span>${esc(m.text)}</span></div>`).join('') || '<p class="muted">Todavía no ha hablado.</p>'}</div>
       <div class="row gap wrap"><button class="btn primary" data-lab="${s.tool}" type="button">Abrir su herramienta</button><button class="btn" data-lab="sala" type="button">Ver la sala</button></div>
@@ -757,7 +757,7 @@ function renderAgenteOficina(body, key) {
     return;
   }
   const jobs = OFICINA.trabajos.filter((j) => j.cadena.includes(s.id));
-  body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="dot busy"></span></div><span class="muted">Departamento: ${esc(s.room)}</span>
+  body.innerHTML = `<section class="card agent" style="--c:${s.color}"><div class="row between"><b>${esc(s.name)}</b><span class="pill warn">Modo simulado</span></div><span class="muted">Departamento: ${esc(s.room)}</span>
     <div class="agent-status">${esc(s.doing)}</div><p>${esc(s.role)}.</p><p class="muted">Entrega: ${esc(s.delivers)}.</p></section>
     <h4 class="section-t">Trabajos en los que participa</h4>
     <div class="chips">${jobs.map((j) => `<button type="button" class="chip" data-job style="border-color:${j.color}">${esc(j.nombre)}</button>`).join('') || '<span class="muted">Ninguno todavía.</span>'}</div>

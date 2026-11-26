@@ -837,7 +837,7 @@ export function createWorld(container, opts) {
     if (!dragLast || !(e.buttons & 1) || pinching) return;
     const dx = e.clientX - dragLast.x, dy = e.clientY - dragLast.y; dragLast = { x: e.clientX, y: e.clientY };
     if (view === 'primera') { yaw -= dx * 0.005; pitch = THREE.MathUtils.clamp(pitch - dy * 0.004, -1.2, 1.2); }
-    else { azim -= dx * 0.006; if (view === 'maqueta') tilt = THREE.MathUtils.clamp(tilt + dy * 0.004, 0.35, 1.45); }
+    else { azim -= dx * 0.006; if (view === 'maqueta') tilt = THREE.MathUtils.clamp(tilt + dy * 0.004, 0.35, 1.45); else tilt3 = THREE.MathUtils.clamp(tilt3 + dy * 0.004, 0.42, 1.35); }
   });
   renderer.domElement.addEventListener('pointerup', (e) => {
     if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 8) return;
@@ -864,10 +864,14 @@ export function createWorld(container, opts) {
   function moveTo(x, z) {
     clearNavigation();
     const end = { x: THREE.MathUtils.clamp(x, -BX, BX), z: THREE.MathUtils.clamp(z, -BZ, BZ) };
-    const path = walkingPath(me.group.position, end, BX, BZ, (x0, z0) => blocked(x0, z0, 0.40));
+    // Sentado, la ruta parte del punto de pie junto a la silla (el escritorio bloquea el asiento).
+    const from = me.seated && me.sitZone ? { x: me.sitZone.x, z: me.sitZone.z } : me.group.position;
+    if (me.glide) return false;
+    const path = walkingPath(from, end, BX, BZ, (x0, z0) => blocked(x0, z0, 0.40));
     if (!path.length) return false;
     waypoints = path.map((point) => new THREE.Vector3(point.x, 0, point.z));
     me.target = waypoints.shift();
+    if (me.seated) standUp();
     marker.position.set(end.x, groundY(fl, end.x, end.z) + 0.02, end.z);
     marker.visible = true;
     return true;
@@ -886,11 +890,16 @@ export function createWorld(container, opts) {
 
   // ---------- movimiento ----------
   const tmp = new THREE.Vector3();
-  function step(av, dir, dt, maxDistance = Infinity) {
+  function step(av, dir, dt, maxDistance = Infinity, slow = 1) {
     if (dir.lengthSq() < 1e-6) return false;
     dir.normalize();
     const p = av.group.position;
-    const distance = Math.min(av.speed * dt, maxDistance);
+    // Arranque y frenada suaves: primero gira (si el destino queda atrás) y la velocidad sube o baja gradualmente.
+    const want = Math.atan2(dir.x, dir.z);
+    const turn = Math.abs(Math.atan2(Math.sin(want - av.group.rotation.y), Math.cos(want - av.group.rotation.y)));
+    const vTarget = av.speed * slow * (turn > 1.1 ? 0.15 : 1);
+    av.v = (av.v || 0) + (vTarget - (av.v || 0)) * Math.min(1, dt * (vTarget > av.v ? 5 : 9));
+    const distance = Math.min(av.v * dt, maxDistance);
     const dx = dir.x * distance, dz = dir.z * distance;
     let moved = false;
     if (!blocked(p.x + dx, p.z + dz, 0.32, av.floor)) { p.x += dx; p.z += dz; moved = true; }
@@ -990,7 +999,8 @@ export function createWorld(container, opts) {
         me.target = waypoints.shift() ?? null;
         marker.visible = Boolean(me.target);
       } else {
-        walking = step(me, tmp, dt, remaining);
+        const last = waypoints.length === 0;
+        walking = step(me, tmp, dt, remaining, last ? Math.min(1, Math.max(0.3, remaining / 0.9)) : 1);
         if (!walking) clearNavigation();
       }
     }
@@ -1018,7 +1028,8 @@ export function createWorld(container, opts) {
     animate(av, walking, dt);
   }
   function animate(av, walking, dt) {
-    animateAvatar(av, walking, av.speed, dt);
+    if (!walking) av.v = 0;
+    animateAvatar(av, walking, av.speed < 3 ? Math.max(av.v || 0, av.speed * 0.6) : av.speed, dt);
   }
 
   // charla de fondo
@@ -1218,7 +1229,7 @@ export function createWorld(container, opts) {
   });
 
   // ---------- bucle ----------
-  let lookAhead = 3, baseFov = 40, view = 'tercera', yaw = Math.PI, pitch = 0, azim = 0, tilt = 0.95;
+  let lookAhead = 3, baseFov = 40, view = 'tercera', yaw = Math.PI, pitch = 0, azim = 0, tilt = 0.95, tilt3 = Math.PI / 4;
   const VIEWS = ['primera', 'tercera', 'maqueta'];
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;
@@ -1253,7 +1264,7 @@ export function createWorld(container, opts) {
       const base = maq ? CENTER : me.group.position;
       let ox, oy, oz;
       if (maq) { const R = 40 * zoom, c = Math.cos(tilt); ox = R * c * Math.sin(azim); oy = R * Math.sin(tilt); oz = R * c * Math.cos(azim); }
-      else { const d = 12.5 * zoom; ox = d * Math.sin(azim); oy = 12.5 * zoom; oz = d * Math.cos(azim); }
+      else { const R = 17.7 * zoom, c = Math.cos(tilt3); ox = R * c * Math.sin(azim); oy = R * Math.sin(tilt3); oz = R * c * Math.cos(azim); }
       camera.position.lerp(tmp.set(base.x + ox, base.y + oy, base.z + oz), k);
       camTarget.lerp(base, 1 - Math.exp(-dt * 7));
       const la = maq ? 0 : lookAhead;
@@ -1299,7 +1310,7 @@ export function createWorld(container, opts) {
     if (fp) { yaw = currentZone?.id === 'tarima' ? 0 : me.group.rotation.y; pitch = 0; }
     const maq = v === 'maqueta';                       // maqueta: muros casi transparentes para ver por dentro
     for (const m of [M.wall, M.slats]) { m.transparent = maq; m.opacity = maq ? 0.12 : 1; m.depthWrite = !maq; m.needsUpdate = true; }
-    zoom = maq && innerWidth < 900 ? 1.45 : 1; tilt = 0.95;
+    zoom = maq && innerWidth < 900 ? 1.45 : 1; tilt = 0.95; tilt3 = Math.PI / 4;
     camera.fov = fp ? 74 : baseFov; camera.near = fp ? 0.05 : 0.1; camera.updateProjectionMatrix();
     opts.onView?.(v);
   }
